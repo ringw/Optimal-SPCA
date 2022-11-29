@@ -304,7 +304,7 @@ function branchAndBound(prob, #problem object
 	best_node = (warmStart.!=0)*1
 
 	#Initializes output
-	println(" Nodes,   Left,  Objective,  Incumbent,       Gap(%),   Runtime(s)")
+	# println(" Nodes,   Left,  Objective,  Incumbent,       Gap(%),   Runtime(s)")
 	toPrint=[Printf.@sprintf("%6d, %6d, %10f, %10f, %10.3f %%, %10.3f s \n", num_nodes, explored, upper, lower, (upper-lower)/(1e-10+upper)*100, time()-start)]
 	printtime = time()
 
