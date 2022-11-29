@@ -388,7 +388,7 @@ function branchAndBound(prob, #problem object
 					upper_bounds[num_nodes] = ub
 				else
 					yKeep = .!(newNodes[:,i].==0)
-					lambdas, betas, = Arpack.eigs(Sigma[yKeep, yKeep], which=:LR, nev=1)
+					lambdas = eigvals(Hermitian(Sigma[yKeep, yKeep]), irange=K:K)
 					lower = min(lower, lambdas[1])
 				end
 			end
