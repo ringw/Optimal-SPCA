@@ -386,6 +386,10 @@ function branchAndBound(prob, #problem object
 					num_nodes = num_nodes + 1
 					nodes[:,num_nodes] = copy(newNodes[:,i])
 					upper_bounds[num_nodes] = ub
+				else
+					yKeep = .!(newNodes[:,i].==0)
+					lambdas, betas, = Arpack.eigs(Sigma[yKeep, yKeep], which=:LR, nev=1)
+					lower = min(lower, lambdas[1])
 				end
 			end
 		end
