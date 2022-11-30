@@ -1,4 +1,40 @@
 using LinearAlgebra, Printf, Arpack
+
+struct TreeNode
+	y::Array{Float64}
+	count_y_plus::Int32
+	count_y_minus::Int32
+	eigvals::Array{Float64}
+	eigvecs::Matrix{Float64}
+end
+
+function emptyNode(y, count_y_plus, count_y_minus)
+	@assert count_y_plus == 0
+	return TreeNode(
+		y,
+		count_y_plus,
+		count_y_minus,
+		[],
+		Matrix(undef, 0, 0),
+	)
+end
+
+function augmentNode(node::TreeNode, Sigma::Matrix{Float64}, node_plus::Int32)
+	@assert node.y[node_plus] == 0
+	y = copy(node.y)
+	y[node_plus] = 1
+	if node.count_y_plus == 0
+		eigvals = [Sigma[node_plus, node_plus]]
+		eigvecs = Matrix(0., 1, 1)
+	else
+		yKeep = y.>0
+		eigen = eigen(Hermitian(Sigma[yKeep, yKeep]))
+		eigvals = eigen.values
+		eigvecs = eigen.vectors
+	end
+	return TreeNode(y, node.count_y_plus + 1, node.count_y_minus, eigvals, eigvecs)
+end
+
 function branchAndBound(prob, #problem object
 		K; # target sparsity
 		outputFlag = 3, # 1, 2, or 3 depending on level of detail sought in output
@@ -271,7 +307,7 @@ function branchAndBound(prob, #problem object
 
 
 	#initializing variables
-	nodes = zeros(n, UOE)
+	nodes = Vector{TreeNode}()
 	nodes[:,1] = round.(Integer,-1*ones(n,1))
 	upper_bounds = zeros(UOE)
 
@@ -317,8 +353,8 @@ function branchAndBound(prob, #problem object
 			nodesToKeep = findall(s->s,nodesToKeep)
 			nodesToKeep = nodesToKeep[nodesToKeep.< num_nodes+1]
 			upper_bounds = [upper_bounds[nodesToKeep]; zeros(UOE)]
-			nodes = [nodes[:, nodesToKeep] zeros(n,UOE)]
-			death = [death[nodesToKeep]; falses(UOE)]
+			nodes = nodes[nodesToKeep]
+			death = death[nodesToKeep]
 			num_nodes = length(nodesToKeep)
 		end
 
