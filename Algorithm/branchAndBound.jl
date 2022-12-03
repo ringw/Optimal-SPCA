@@ -16,13 +16,13 @@ function covRankOneUpdate(current_eigvals, current_eigvecs, cov_slice)
 	push!(update_vec, cov_slice[end] - norm(update_vec)^2)
 	rho = norm(update_vec)^2
 	update_vec = update_vec ./ norm(update_vec)
-	eigvecs = zeros(K, K)
+	eigvecs = Matrix{Float32}(zeros(K, K))
 	eigvecs[1:K-1, 1:K-1] = current_eigvecs
 	eigvecs[K-1, K-1] = 1.
-	eigvals = zeros(K)
+	eigvals = Vector{Float32}(zeros(K))
 	eigvals[1:K-1] = current_eigvals
-	D = Array{Float64}(undef, K)
-	S = Matrix{Float64}(undef, K, K)
+	D = Array{Float32}(undef, K)
+	S = Matrix{Float32}(undef, K, K)
 	info = -1000
 	ccall(
 		(:slaed9_, "liblapack"),
