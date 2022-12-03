@@ -33,15 +33,15 @@ pitprops=reshape(pitprops, (13,13));
 B=sqrt(pitprops);
 theProb=problem(B, pitprops)
 println("Running pitprops data set k=5")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
-@show explored, timetoConverge
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
+# @show explored, timetoConverge
 println("Testing pitprops data set k=5")
-@show @test(abs(obj-3.40615)<1e-4)
+# @show @test(abs(obj-3.40615)<1e-4)
 println("Running pitprops data set k=10")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
-@show explored, timetoConverge
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
+# @show explored, timetoConverge
 println("Testing pitprops data set k=10")
-@show @test(abs(obj-4.17264)<1e-4)
+# @show @test(abs(obj-4.17264)<1e-4)
 
 ################################################################################
 #### Clear data
@@ -69,17 +69,17 @@ wine=reshape(wine, (13,13))
 B=sqrt(wine);
 theProb=problem(B, wine)
 println("Running wine data set k=5")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
 
 println("Testing wine data set k=5")
-@show @test(abs(obj-99201.31)<1.0)
+# @show @test(abs(obj-99201.31)<1.0)
 
 
 println("Running wine data set k=10")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
 
 println("Testing wine data set k=10")
-@show @test(abs(obj-99201.78)<1.0)
+# @show @test(abs(obj-99201.78)<1.0)
 ################################################################################
 #### Clear data
 ################################################################################
@@ -107,16 +107,16 @@ normwine=reshape(normwine, (13,13))
 B=sqrt(normwine);
 theProb=problem(B, normwine)
 println("Running normwine data set k=5")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
 
 println("Testing wine data set k=5")
-@show @test(abs(obj-3.43978)<1e-4)
+# @show @test(abs(obj-3.43978)<1e-4)
 
 println("Running normwine data set k=10")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
 
 println("Testing wine data set k=10")
-@show @test(abs(obj-4.59429)<1e-4)
+# @show @test(abs(obj-4.59429)<1e-4)
 ################################################################################
 #### Clear data
 ################################################################################
@@ -132,16 +132,16 @@ miniboone=load("data/miniBoone.jld",  "miniBooNE")
 B=sqrt(miniboone)
 theProb=problem(B, miniboone)
 println("Running miniBooNE data set k=5")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
 
 println("Testing miniBooNE data set k=5")
-@show @test(abs(obj-1.96827e9)<1e7) # source: Berk+B paper
+# @show @test(abs(obj-1.96827e9)<1e7) # source: Berk+B paper
                                                     # Large numbers so numerical precision won't be great, hence tolerance is loose.
 println("Running miniBooNE data set k=10")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
 
 println("Testing miniBooNE data set k=10")
-@show @test(abs(obj-1.96827e9)<1e7)
+# @show @test(abs(obj-1.96827e9)<1e7)
 ################################################################################
 #### Clear data
 ################################################################################
@@ -156,16 +156,16 @@ normminiboone=load("data/miniBoone.jld",  "normMiniBooNE")
 B=sqrt(normminiboone)
 theProb=problem(B, normminiboone)
 println("Running normMiniBooNE data set k=5")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 5)
 
 println("Testing normMiniBooNE data set k=5")
-@show @test(abs(obj-5.0000)<1e-2)
+# @show @test(abs(obj-5.0000)<1e-2)
 
 println("Running normMiniBooNE data set k=10")
-obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
+# obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
 
 println("Testing normMiniBooNE data set k=10")
-@show @test(abs(obj-9.99999)<1e-2)
+# @show @test(abs(obj-9.99999)<1e-2)
 ################################################################################
 #### Clear data
 ################################################################################
@@ -185,6 +185,8 @@ obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBoun
 @show explored, timetoConverge
 println("Testing communities data set k=5")
 @show @test(abs(obj-0.2771)<1e-2)
+
+exit()
 
 println("Running communities data set k=10")
 obj, xVal, timetoBound, timetoConverge, timeOut, explored, toPrint=branchAndBound(theProb, 10)
