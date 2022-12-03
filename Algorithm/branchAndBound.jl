@@ -3,36 +3,43 @@ using LinearAlgebra, Printf, Arpack
 struct TreeNode
 	y::Array{Float64}
 	count_y_plus::Int32
-	count_y_minus::Int32
+	count_y_zero::Int32
 	eigvals::Array{Float64}
 	eigvecs::Matrix{Float64}
 end
 
-function emptyNode(y, count_y_plus, count_y_minus)
+function emptyNode(y, count_y_plus, count_y_zero)
 	@assert count_y_plus == 0
 	return TreeNode(
 		y,
 		count_y_plus,
-		count_y_minus,
+		count_y_zero,
 		[],
 		Matrix(undef, 0, 0),
 	)
 end
 
-function augmentNode(node::TreeNode, Sigma::Matrix{Float64}, node_plus::Int32)
-	@assert node.y[node_plus] == 0
+function excludeNode(node::TreeNode, node_zero::Int64)
+	@assert node.y[node_zero] == -1
+	y = copy(node.y)
+	y[node_zero] = 0
+	return TreeNode(y, node.count_y_plus, node.count_y_zero + 1, node.eigvals, node.eigvecs)
+end
+
+function augmentNode(node::TreeNode, Sigma::Matrix{Float64}, node_plus::Int64)
+	@assert node.y[node_plus] == -1
 	y = copy(node.y)
 	y[node_plus] = 1
 	if node.count_y_plus == 0
 		eigvals = [Sigma[node_plus, node_plus]]
-		eigvecs = Matrix(0., 1, 1)
+		eigvecs = I + zeros(1, 1)
 	else
 		yKeep = y.>0
-		eigen = eigen(Hermitian(Sigma[yKeep, yKeep]))
-		eigvals = eigen.values
-		eigvecs = eigen.vectors
+		eigstruct = eigen(Hermitian(Sigma[yKeep, yKeep]))
+		eigvals = eigstruct.values
+		eigvecs = eigstruct.vectors
 	end
-	return TreeNode(y, node.count_y_plus + 1, node.count_y_minus, eigvals, eigvecs)
+	return TreeNode(y, node.count_y_plus + 1, node.count_y_zero, eigvals, eigvecs)
 end
 
 function branchAndBound(prob, #problem object
@@ -264,7 +271,7 @@ function branchAndBound(prob, #problem object
 	# Function to select the most recently created node that is not terminal
 	function depth_select()
 		selected_node = num_nodes
-		while (isTerminal(nodes[:, selected_node]) | death[selected_node])
+		while (isTerminal(nodes[selected_node].y) | death[selected_node])
 			selected_node = selected_node-1
 			if selected_node == 0
 				return 0
@@ -307,8 +314,8 @@ function branchAndBound(prob, #problem object
 
 
 	#initializing variables
-	nodes = Vector{TreeNode}()
-	nodes[:,1] = round.(Integer,-1*ones(n,1))
+	nodes = Union{TreeNode, Nothing}[nothing for _ in 1:UOE]
+	nodes[1] = emptyNode(round.(Integer, -1*ones(n)), 0, 0)
 	upper_bounds = zeros(UOE)
 
 	eigGapSave = eigGap
@@ -348,13 +355,13 @@ function branchAndBound(prob, #problem object
 		explored = explored + 1
 
 		# Occasionally print updates and risize arrays
-		if lower_revised == 1 || size(nodes)[2]-num_nodes < K+5 || explored < 100
+		if lower_revised == 1 || length(nodes)-num_nodes < K+5 || explored < 100
 			nodesToKeep = .!(upper_bounds.< lower) .& .!death
 			nodesToKeep = findall(s->s,nodesToKeep)
 			nodesToKeep = nodesToKeep[nodesToKeep.< num_nodes+1]
 			upper_bounds = [upper_bounds[nodesToKeep]; zeros(UOE)]
-			nodes = nodes[nodesToKeep]
-			death = death[nodesToKeep]
+			nodes = cat(nodes[nodesToKeep], Union{TreeNode, Nothing}[nothing for _ in 1:UOE], dims=1)
+			death = [death[nodesToKeep]; falses(UOE)]
 			num_nodes = length(nodesToKeep)
 		end
 
@@ -379,53 +386,53 @@ function branchAndBound(prob, #problem object
 		if selected_node == 0
 			break;
 		end
-		old_y = nodes[:, selected_node]
+		old_y = nodes[selected_node]
 
 		# Determines whether to split in 2 on one dimension or use multiple segments
-		if (K-sum(max.(old_y,0)) < ksegmentsTrigger) & (randn()>1)
-			numOnes = sum(max.(old_y,0))
-			negOnes = findall(s->s==-1, old_y)
+		if (K-sum(max.(old_y.y,0)) < ksegmentsTrigger) & (randn()>1)
+			numOnes = sum(max.(old_y.y,0))
+			negOnes = findall(s->s==-1, old_y.y)
 			if length(negOnes) >= (K-numOnes+1)*2
 				numBranches = round.(Integer,K-numOnes+1)
-				newNodes = transpose(repeat(transpose(old_y), numBranches))
+				newNodes = Vector{Union{TreeNode, Nothing}}(undef, numBranches)
 				partition = yourpart(negOnes,numBranches)
 				for i = 1:numBranches
-					newNodes[partition[i],i] = 0
+					newNodes[i] = excludeNode(old_y, partition[i])
 				end
 			else
 				numBranches = 2
-				newNodes = transpose(repeat(transpose(old_y), numBranches))
-				branch_dim = branchDimSelect(old_y)
-				newNodes[branch_dim ,1] = 1
-				newNodes[branch_dim ,2] = 0
+				newNodes = Vector{Union{TreeNode, Nothing}}(undef, numBranches)
+				branch_dim = branchDimSelect(old_y.y)
+				newNodes[1] = augmentNode(old_y, Sigma, branch_dim)
+				newNodes[2] = excludeNode(old_y, branch_dim)
 			end
 		else
 			numBranches = 2
-			newNodes = transpose(repeat(transpose(old_y), numBranches))
-			branch_dim = branchDimSelect(old_y)
-			newNodes[branch_dim ,1] = 1
-			newNodes[branch_dim ,2] = 0
+			newNodes = Vector{Union{TreeNode, Nothing}}(undef, numBranches)
+			branch_dim = branchDimSelect(old_y.y)
+			newNodes[1] = augmentNode(old_y, Sigma, branch_dim)
+			newNodes[2] = excludeNode(old_y, branch_dim)
 		end
 
 		# Computes bounds at new nodes and saves them if not dominated or terminal
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub = return_bounds(newNodes[:,i], oldub)
+			lb, ub = return_bounds(newNodes[i].y, oldub)
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
-					best_node = copy(newNodes[:,i])
+					best_node = newNodes[i].y
 					lower_revised = 1
 				end
-				if .!(isTerminal(newNodes[:,i]))
+				if .!(isTerminal(newNodes[i].y))
 					num_nodes = num_nodes + 1
-					nodes[:,num_nodes] = copy(newNodes[:,i])
+					nodes[num_nodes] = newNodes[i]
 					upper_bounds[num_nodes] = ub
 				else
-					yKeep = .!(newNodes[:,i].==0)
-					lambdas = eigvals(Hermitian(Sigma[yKeep, yKeep]), irange=K:K)
-					lower = min(lower, lambdas[1])
+					yKeep = .!(newNodes[i].y.==0)
+					lambdas = newNodes[i].eigvals
+					lower = min(lower, max(lambdas))
 				end
 			end
 		end
