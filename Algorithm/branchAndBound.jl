@@ -8,6 +8,35 @@ struct TreeNode
 	eigvecs::Matrix{Float64}
 end
 
+function covRankOneUpdate(current_eigvals, current_eigvecs, cov_slice)
+	K = length(cov_slice)
+	# BUG ALERT: We expect singular value from PSD matrix (sqrt)
+	update_vec = (current_eigvecs' * cov_slice[1:end-1]) ./ current_eigvals
+	# BUG ALERT: This term needs a sqrt, but we have an issue where it is negative
+	push!(update_vec, cov_slice[end] - norm(update_vec)^2)
+	rho = norm(update_vec)^2
+	update_vec = update_vec ./ norm(update_vec)
+	eigvecs = zeros(K, K)
+	eigvecs[1:K-1, 1:K-1] = current_eigvecs
+	eigvecs[K-1, K-1] = 1.
+	eigvals = zeros(K)
+	eigvals[1:K-1] = current_eigvals
+	D = Array{Float64}(undef, K)
+	S = Matrix{Float64}(undef, K, K)
+	info = -1000
+	ccall(
+		(:slaed9_, "liblapack"),
+		Int64,
+		(Ref{Int32}, Ref{Int32}, Ref{Int32}, Ref{Int32},
+			Ptr{Float32}, Ptr{Float32},
+			Ref{Int32}, Ref{Float32},
+			Ptr{Float32}, Ptr{Float32}, Ptr{Float32},
+			Ref{Int32}, Ref{Int32}),
+		K, 1, K, K, D, eigvecs, K, rho, eigvals, update_vec, S, K, info)
+	@assert info == -1000 ("LAPACK error code " * string(info))
+	return D, S
+end
+
 function emptyNode(y, count_y_plus, count_y_zero)
 	@assert count_y_plus == 0
 	return TreeNode(
@@ -35,9 +64,18 @@ function augmentNode(node::TreeNode, Sigma::Matrix{Float64}, node_plus::Int64)
 		eigvecs = I + zeros(1, 1)
 	else
 		yKeep = y.>0
-		eigstruct = eigen(Hermitian(Sigma[yKeep, yKeep]))
-		eigvals = eigstruct.values
-		eigvecs = eigstruct.vectors
+		# eigstruct = eigen(Hermitian(Sigma[yKeep, yKeep]))
+		# eigvals = eigstruct.values
+		# eigvecs = eigstruct.vectors
+		# KNOWN BUG: This discards the order in which updates are added (we
+		# artifically add a sort of the indices)
+		sigma_seen = findall(x -> x == 1, node.y)
+		push!(sigma_seen, node_plus)
+		eigvals, eigvecs = covRankOneUpdate(
+			node.eigvals,
+			node.eigvecs,
+			Sigma[node_plus, sigma_seen]
+		)
 	end
 	return TreeNode(y, node.count_y_plus + 1, node.count_y_zero, eigvals, eigvecs)
 end
