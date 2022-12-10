@@ -24,6 +24,45 @@ Lower bounding the eigenvalue would become inaccurate with significant $\theta$.
 
 We should probably also capture the radial uncertainty in the second eigenvector by multiplying a 3x3 rotation matrix, instead of using an angle. The upper bound of the first eigenvalue and lower bound of the second eigenvalue form a system (Zhu's formulae use the difference, or gap, between eigenvalues). When we have further eigenvectors which are never updated, then the second eigenvalue upper bound might no longer be able to rely on either bound of the third eigenvalue. We might use simple bounds on successive eigenvalues (Gershgorin upper bound, system before update as the lower bound). Zhu's formulae, applied to the dominant two eigenvalues only, might be strictly better for performance than Gershgorin upper bound for all eigenvalues.
 
+\section{Behavior of dominant eigenvalue upper bound}
+
+Get the diagonal update (appending data column $i$) from the original covariance matrix: $\Sigma_{ii}$.
+
+Then the magnitude of the rank-one update vector $w$ to the covariance subset matrix is $\sqrt{\Sigma_{ii}}$.
+We also need the update aligned with the dominant eigenvalue. All updates but one come from: $D^{-\frac{1}{2}} V^T \Sigma_{1:k,i}$
+
+$$
+2 u_1 = \Sigma_{ii} - (\lambda_1 - \lambda_2) + \sqrt{\left(\lambda_1 - \lambda_2 + \Sigma_{ii} \right)^2 - 4(\lambda_1 - \lambda_2)(\Sigma_{ii} - w_1^2)}
+$$
+
+Inside the square root, we have:
+
+$$
+(\lambda_1 - \lambda_2)^2 + 2\Sigma_{ii} (\lambda_1 - \lambda_2) + \Sigma_{ii}^2
+- 4\Sigma_{ii} (\lambda_1 - \lambda_2) + 4w_1^2 (\lambda_1 - \lambda_2)
+$$
+
+Simplify:
+
+$$
+2u_1
+=
+\Sigma_{ii} - (\lambda_1 - \lambda_2)
++
+\sqrt{(\lambda_1 - \lambda_2)^2 + (4w_1^2 - 2\Sigma_{ii})(\lambda_1 - \lambda_2) + \Sigma_{ii}^2}
+$$
+
+Factor:
+
+$$
+2u_1 =
+\Sigma_{ii}
+- (\lambda_1 - \lambda_2)
++ \sqrt{4w_1^2 + (\lambda_1 - \lambda_2) \Sigma_{ii}^2}
+$$
+
+As the eigenvalue gap shrinks, the square root term, after taking the difference with the eigenvalue gap, will be larger. With an eigenvalue that is close in magnitude, there is potential to take some of that magnitude into the principal component.
+
 \section{Searching for extrema of Zhu's lower and upper bounds}
 
 We need to search for critical points, in case Zhu's formulae must be applied to the system using any matrix entries, other than those extremes of the variables which we are tracking.
@@ -78,6 +117,34 @@ $$
 $$
 
 By symmetry with $\frac{\delta \ell_1}{\delta g_2}$ expansion, we think that $\frac{\delta \ell_1}{\delta w_2}$ will not have a critical point of interest either.
+
+\subsection{Upper bound (case 1)}
+
+Assume that the update vector has magnitude 1 (this is the variance of the variable; diagonal entry of the covariance matrix).
+
+$$
+u_1(w_1, g_2) = \frac{1}{2} \left( 1 - g_2 + \sqrt{(g_2 + 1)^2 - 4g_2 (1 - w_1)} \right)
+$$
+
+$$
+\frac{\delta u_1}{\delta g_2}
+=
+\frac{1}{2}
+\left(
+    -1 + \frac{g+2w-1}{\sqrt{g^2+g(4w-2)+1}}
+\right)
+= 0
+$$
+
+$$
+(g+2w-1)^2 = g^2 + g(4w-2) + 1 = (g+2w-1)^2 - (2w-1)^2 + 1
+$$
+
+$$
+-2w^2 + 4w = 0
+$$
+
+However, $w$ itself was a squared term which we redefined for convenience.
 
 \subsubsection{Analysis}
 
