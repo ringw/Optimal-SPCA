@@ -1,4 +1,4 @@
-using LinearAlgebra, Printf, Arpack
+using Combinatorics, LinearAlgebra, Printf, Arpack
 function branchAndBound(prob, #problem object
 		K; # target sparsity
 		outputFlag = 3, # 1, 2, or 3 depending on level of detail sought in output
@@ -139,7 +139,48 @@ function branchAndBound(prob, #problem object
 		indicesLeft = sortedOrder[y.==-1]
 		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
 
-		return min(eb1,eb2)
+		eb3 = 0
+		if sum(ypositive) > 0
+			# Best guess for the final left singular vector with k-sparse constraint.
+			# It is useful to shrink the problem, so that we have the sum of a large,
+			# rank-one matrix, and a smaller (nearly orthogonal) high-rank matrix,
+			# whose sum is the covariance matrix.
+			data_vector = svd(A[:, ypositive]).U[:, 1]
+			# Create the large rank-one covariance matrix.
+			projection = A' * data_vector * data_vector' * A
+			residual = Sigma - projection
+
+			# Ipsen - exponential runtime! We haven't evaluated a good approximation to maximize:
+			#     v' S v + || S * Sigma * S * v || / || S * v ||
+			# over combinatorial number of S.
+			# S projects the data onto a k-sparse result (S consists of standard basis vectors;
+			# identity matrix; but with n-k of the diagonals zeroed out). 
+			for ipsen_lookup in combinations(findall(s -> s == -1, y), K - sum(ypositive))
+				# length(ipsen_lookup) == K.
+				ipsen_lookup = [findall(s -> s, ypositive); ipsen_lookup]
+				# The rank-one matrix (projected using a best guess) is our
+				# "original" system. Once we select k elements, then we take a
+				# sum of squares from the basis vector which creates the
+				# symmetric matrix - this is the trace of the rank-one matrix.
+				rank_one_trace = sum((data_vector' * A[:, ipsen_lookup]) .^ 2)
+				# Ipsen et. al provided a perturbation bound which is effective
+				# for sum of 
+				# We want to "norm" the matrix being added to the rank-one
+				# system, but per Ipsen et. al, we simply need to project it
+				# onto the nearby eigenvalues. This is highly useful for the
+				# dominant eigenvalue when adding two PSD matrices (the caveats
+				# about eigenvalue gap are generally null).
+				ipsen_matrix = residual[ipsen_lookup, ipsen_lookup]
+				ipsen_vector = (data_vector' * A[:, ipsen_lookup])'
+				ipsen_vector = ipsen_vector / norm(ipsen_vector)
+				eb3 = max(eb3, rank_one_trace + norm(ipsen_matrix * ipsen_vector))
+			end
+		end
+		if eb3 == 0
+			eb3 = eb2
+		end
+
+		return min(eb1,eb2,eb3)
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
