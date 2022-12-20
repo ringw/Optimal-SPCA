@@ -56,6 +56,10 @@ So far, states would be given a very large upper bound if they contain both high
 
 Performance depends upon choosing a left-singular vector which the data can be projected onto. We haven't provided instructions for an upper bound in a state where $i=0$. We could use the entire data matrix's SVD and the exact PCA as a seed, but an effective sparsity constraint can actually rotate the large principal components significantly. $k$-sparse PCA can produce a principal component with strikingly low cosine similarity to non-sparse PCA. However, the two-dimensional plots are strikingly similar to robust PCA, which can shrink the magnitude of outlier observations. We suggest investigating any dense robust PCA, which penalizes outlier observations, as a seed which may allow us to compute the improved upper bound, from beginning to end of the graph search.
 
+\section{Ipsen}
+
+Let $\frac{v}{||v||}$ be the projection left singular vector (guess the SPCA principal component, then multiply on the left by $A$). Let $A$ be the data matrix, m x n. The singular value (operator norm) of the rank-one projected covariance matrix is 
+
 \section{Future Directions}
 
 We should consider the ability of this Sparse PCA graph search framework to select $d$ principal components with a support of $k$.
