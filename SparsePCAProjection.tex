@@ -58,7 +58,29 @@ Performance depends upon choosing a left-singular vector which the data can be p
 
 \section{Ipsen}
 
-Let $\frac{v}{||v||}$ be the projection left singular vector (guess the SPCA principal component, then multiply on the left by $A$). Let $A$ be the data matrix, m x n. The singular value (operator norm) of the rank-one projected covariance matrix is 
+Make a best guess for principal component loadings $u$ for the SPCA result. This comes from an SVD of the data matrix subsetted where $\mathcal{L}_i=1$ (which we solved efficiently). By solving the small covariance matrix/right singular vectors, we can multiply through by $A$ and find the corresponding left singular vector, which is a linear combination of the variables selected so far. $u$ should be unit-normed, because it will be used for projecting other variables.
+
+After this step, we can subset $A$ as desired; consider for the rest of this procedure that $A$ can have any of the columns which are desired. The projected covariance matrix, which is rank-one, is $(A^T u)(u^T A)$, and it has an operator norm (for this PSD matrix, the dominant eigenvalue): $u^T A A^T u$. No further norming of values is needed. This is a (not tight) lower bound on the dominant eigenvalue of the covariance matrix.
+
+The additive update is given by the covariance of residual data: $A^T (I - v v^T) A$. For some dominant right eigenvector $w$ of this new matrix, we have the operator norm bounding the update as: $||A^T (I-uu^T) A|| = ||A^T (I-uu^T) A w||$. However, this is not a tight bound.
+
+Instead of the dominant eigenvector of the update matrix, we may use the eigenvector of interest of the original matrix, which is given by $A^T u$ (but must be unit-normed). The eigenvalue after update is upper-bounded by:
+
+$$
+u^T A A^T u + \frac{|| (A^T (I-uu^T) A) (A^T u) ||}{|| A^T u ||}
+$$
+
+We are dealing with a quotient of column vectors. For each column vector, use a dot product and square root.
+
+\begin{equation*}
+    \begin{aligned}
+        & u^T A A^T u + \sqrt{\frac{u^T A (A^T (I-uu^T) A) (A^T (I-uu^T) A) A^T u}{u^T A A^T u}}
+        % \\
+        % &= 1
+    \end{aligned}
+\end{equation*}
+
+Note - We want to introduce a diagonal matrix to take certain columns from $A$, and zeroes otherwise. We need the global optimum of this upper bound, or else we might have skipped a possible variable selection for SPCA. That is starting to look like a linear programming problem. We can't continue here trying to calculate the gradient (convex optimization) and approximate solution using rounding, because we are looking for an upper bound, not a lower bound.
 
 \section{Future Directions}
 
