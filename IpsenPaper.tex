@@ -100,14 +100,14 @@ $$
 % \left< S_\text{res}, |\Sigma_{n-i}^\text{res} \odot v v^T| \right>
 $$
 
-In general, introducing square convex terms into a maximization (not minimization) problem would lead to NP-hardness (a la quadratic programming minimization with an indefinite matrix). We cannot square the matrix, and need to upper bound the spectral radius of the matrix (which bounds the effect of squaring it). We can use the original bounds from Berk et. al on our residual covariance matrix and $k$-sparsity $S$ matrix ($\text{Tr } S = k$).
+In general, introducing square convex terms into a maximization (not minimization) problem would lead to NP-hardness (a la quadratic programming minimization with an indefinite matrix). We cannot square the matrix, and will bound the action of the matrix's spectrum on this vector $v$. First, we have $v S_\text{res} v^T = 1$ as one of our constraints. Elementwise multiplication by the matrix $\Sigma_{n-i}^\text{res}$ produces another positive semidefinite matrix (Schur product theorem). This matrix can be loosely bounded using the largest absolute value element of $\Sigma$, which is found on its diagonal, multiplied by $S_\text{res}$. For any bound $B$ on $v M v^T \le B$ for positive semidefinite $M$, we expect $v M^2 v^T \le v M v^T * B$.
 
 % As a sketch, a row/column of $S$ should have $k$ nonzero entries and all other entries near zero, and the covariance matrix $\Sigma^\text{res}$ is dominated by its diagonal, so using the Gershgorin circle theorem, the additional factor due to an additional multiplication by the matrix is upper-bounded by $k \max_i \left| \left( \Sigma^\text{res} \right)_{ii} \right|$.
 
 $$
 || \text{Diag}(z) \Sigma_{n-i}^\text{res} \text{Diag}(z) v ||_2^2
 < \left< S_\text{res}, \Sigma_{n-i}^\text{res} \odot v v^T \right>
-* k \max_{i} \left| \left( \Sigma_{n-i}^\text{res} \right)_{ii} \right|
+* \max_{i} \left| \left( \Sigma_{n-i}^\text{res} \right)_{ii} \right|
 $$
 
 Finally, this term in the objective requires a new scalar value which is the square root. The square root function is concave. The quadratic cone can allow for slack in the inequality $|a| \le \sqrt{b}$, so conic programming is useful for a square root term which represents a valuable quantity, but not for representing the square root of a cost.
