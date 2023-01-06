@@ -1,0 +1,152 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+
+\title{Bounding tree-based Sparse PCA using perturbation theory}
+
+\author{Daniel Ringwalt}
+
+\begin{document}
+	
+\maketitle
+
+\section{Perturbing the partial solution}
+
+\begin{itemize}
+    \item Some nodes in the tree will commit an additional variable to the partial solution.
+    \item The node can be represented by an indicator vector $z \in \{0,1\}^n$ having lower and upper bounds.
+    \item The nodes of interest will assign a value of 1 at a formerly unbounded location.
+    \item Sparse PCA is given by the SVD of a completed data subset $M_z$, \\ $z \in \{0,1\}^n, ||z||_1 = k$.
+\end{itemize}
+
+\section{Lower bound from the partial solution}
+
+\begin{itemize}
+    \item Use the SVD of the partially built data matrix $M_\mathbf{1}$.
+    \item Specifically, we can compute the dominant left singular vector $u$.
+    \item There is a different $u$ after subsetting $M$ according to the global optimum $k$-sparse PCA solution.
+    \item Suppose that the correlation of $u$ and the globally optimum $u$ is very high.
+    \item Select the remaining $k-i$ variables from $M$ greedily according to their dot product with $u$.
+    \item We may find a better $u$ and objective value on this greedy subset by running SVD again, or assume that $u$ is of high quality and take the sum of dot products as a lower bound on the objective.
+    \item This deterministic (over some fixed $M_\mathbf{1}$) algorithm will be evaluated against stochastic sparse PCA.
+\end{itemize}
+
+\section{Upper bound on completing the solution}
+
+\begin{itemize}
+    \item Completing $M_\mathbf{1}$ is a combinatoric problem to be addressed in the next section.
+    \item Suppose that $M_\mathbf{1}$ is a good approximation of the $i$-sparse PCA problem, so the left-SVD of $M_\mathbf{1}$ is starting to approach the left-SVD of our solution $M_z$.
+    \item Consider the Gram matrix $M_\mathbf{1} M_\mathbf{1}^T$ (where the entries of the matrix represent the observations): $\Sigma_\mathbf{1}$.
+    \item The matrix $\Sigma_\mathbf{1}$ has an eigensystem where only the dominant eigenvalue is of interest, so we can approximate $\Sigma_\mathbf{1}$ as being rank-one.
+    \item We can complete $\Sigma_\mathbf{1}$ by adding a rank-$k-i$ matrix $\Sigma_{k-i}$. Assume that this matrix is fixed, and consider the combinatorial problem in the next section.
+    \item The operator norm, or definite matrix spectral radius, $||\Sigma_\mathbf{1} + \Sigma_{k-i}||$ is upper-bounded by $||\Sigma_\mathbf{1}|| + ||\Sigma_{k-i}||$.
+    \item Project the data onto $u$: $||\Sigma_{k-i}||_2 = ||M_{k-i}^T u||_2^2 + ||\Sigma_{k-i}^\text{res}||_2$.
+    \item The operator norm $||\Sigma_{k-i}^\text{res}||_2$ is given by some vector $v, ||v||_2=1$ which maximizes $||\Sigma_{k-i}^\text{res} v||_2$.
+    \item In this case, we constructed $\Sigma_{k-i}^\text{res}$ to be nearly singular by subtracting the projection onto $u$, so $u$ and this dominant $v$ are almost orthogonal. The bound is not very tight.
+    \item For perturbing one positive semidefinite eigensystem by adding another such matrix, we can start from the dominant eigenvalue/eigenvector of one particular summand, and use a matrix-vector multiplication for the other summand:
+    $$
+        ||\Sigma_\mathbf{1} + \Sigma_{k-i}||
+        \le
+        ||M_\mathbf{1} u||_2^2
+        +
+        ||M_{k-i} u||_2^2
+        +
+        ||\Sigma_{k-i}^\text{res} u||_2
+    $$
+\end{itemize}
+
+\section{Parameterizing a solution}
+
+Revisit the indicator vector $z \in \{0,1\}^{n-i}, ||z||_1 = k-i$ (the contribution of the original $i$ variables to the objective function has already been made constant). The objective function should be heavily influenced by the rank-one projection, with a greater contribution than the residual's contribution: $\sum_i z_i (M_{*i}^T u)^2$.
+
+\subsection{Residual term}
+
+For the residual's contribution, we need to insert a sparsity-inducing term into the middle of the matrix-vector multiplication over the full covariance matrix: $||\Sigma_{n-i}^\text{res} v||_2$. We sparsify the rows of $\Sigma$ and of $u$ using a diagonal matrix on the left side, but the sparsified $u$ should be unit-normed:
+
+$$\frac{|| \text{Diag}(z) \Sigma_{n-i}^\text{res} \text{Diag}(z) v||}{|| \text{Diag}(z) v ||}$$
+
+% We can introduce a helper variable $c$, so that $(c,z)$ lies in the following cone (with $u$ provided when instantiating the program):
+
+% $$(c,z) \in \mathbb{R}^{n+1} : || \text{Diag}(z) u ||_2 = c$$
+
+\subsection{Limitations of quadratic programming}
+
+Our objective function could start to look like a matrix-vector multiplication quadratic. Just like PCA (which is solved by the dominant eigenvector), the equation $\max v^T \Sigma v$ cannot be solved via an optimization program. Usually, convex optimization solvers would be applied to a positive definite matrix of costs/risks to be minimized, not maximized.
+
+Plug-ins can be created for some optimization libraries in the form of custom cones. For example, the set $(t \in \mathbb{R}, x \in \mathbb{R}^n) : t \ge ||x||_2$ is a quadratic cone constraint. The cone must be closed under addition (in $(t_1,x_1)+(t_2,x_2)$, the $t$ grows very quickly and the bound clearly holds in this direction). Also, the cone must be closed under scaling by a real number (so we cannot bound the reciprocal $\ell_2$ norm in the direction which we might want, for scaling our objective function post-hoc).
+
+\subsection{Semidefinite programming relaxation}
+
+Rewriting our objective function using a rank-one zero-one matrix $z z^T$ helps us find $||z||_2^2$ using $\text{Tr }(z z^T)$. A rank-one constraint would not be a conic constraint (the set of matrices is clearly not closed under addition), so the constraint is usually dropped. Dropping $\text{Diag}(z)$, use a PSD matrix (expected to be low-rank) $S$ (sparsity-inducing matrix).
+
+$$|| \text{Diag}(z) v ||_2^2 = v^T \text{Diag}^2(z) v
+\approx
+v^T S v
+= \text{Tr } v^T S v = \text{Tr } S v v^T = \left< S, v v^T \right>
+$$
+
+The sparsity-inducing matrix $S$ will be applied to our residual matrix here, so use a scaled matrix $S_\text{res}$ with constraint ($v$ defined ahead of time) $\left< S_\text{res}, v v^T \right> = 1$. Later, we will scale $S$ back up by some variable scale factor (which cannot be expressed ahead of time in a linear program).
+
+For the (squared) numerator, we will need to generalize this inner product to encompass 3 PSD matrices. The inner product $\left< A, B \right>$ can be expressed as $\sum_i \sum_j a_{ij} b_{ij} = \sum_i \sum_j (A \odot B)_{ij}$, and we will generalize this to applying 3 PSD matrices.
+
+$$
+|| \text{Diag}(z) \Sigma_{n-i}^\text{res} \text{Diag}(z) v ||_2^2
+\approx
+|| (S_\text{res} \odot \Sigma_{n-i}^\text{res}) v ||_2^2
+= v^T (S_\text{res} \odot \Sigma_{n-i}^\text{res})^2 v
+% = \left< (S_\text{res} \odot \Sigma_{n-i}^\text{res})^2, v v^T \right>
+% <
+% \left< S_\text{res}, |\Sigma_{n-i}^\text{res} \odot v v^T| \right>
+$$
+
+In general, introducing square convex terms into a maximization (not minimization) problem would lead to NP-hardness (a la quadratic programming minimization with an indefinite matrix). We cannot square the matrix, and will bound the action of the matrix's spectrum on this vector $v$. First, we have $v S_\text{res} v^T = 1$ as one of our constraints. Elementwise multiplication by the matrix $\Sigma_{n-i}^\text{res}$ produces another positive semidefinite matrix (Schur product theorem). This matrix can be loosely bounded using the largest absolute value element of $\Sigma$, which is found on its diagonal, multiplied by $S_\text{res}$. For any bound $B$ on $v M v^T \le B$ for positive semidefinite $M$, we expect $v M^2 v^T \le v M v^T * B$.
+
+% As a sketch, a row/column of $S$ should have $k$ nonzero entries and all other entries near zero, and the covariance matrix $\Sigma^\text{res}$ is dominated by its diagonal, so using the Gershgorin circle theorem, the additional factor due to an additional multiplication by the matrix is upper-bounded by $k \max_i \left| \left( \Sigma^\text{res} \right)_{ii} \right|$.
+
+$$
+|| \text{Diag}(z) \Sigma_{n-i}^\text{res} \text{Diag}(z) v ||_2^2
+< \left< S_\text{res}, \Sigma_{n-i}^\text{res} \odot v v^T \right>
+* \max_{i} \left| \left( \Sigma_{n-i}^\text{res} \right)_{ii} \right|
+$$
+
+Finally, this term in the objective requires a new scalar value which is the square root. The square root function is concave. The quadratic cone can allow for slack in the inequality $|a| \le \sqrt{b}$, so conic programming is useful for a square root term which represents a valuable quantity, but not for representing the square root of a cost.
+
+% \subsubsection*{Ignore - residual term $\ell_2^2$}
+
+% Substitute $u u^T$ for $u$, since the multiplication of two PSD matrices is often studied in mathematical programming (semidefinite programming).
+
+% $$
+% \text{Tr } \Sigma_{n-i}^\text{res} u u^T
+% = \sum_i \sum_j \left( \Sigma_{n-i}^\text{res} \right)_{ij} u_i u_j
+% $$
+
+% The result should have rank at most one, and the eigenvalue of $u u^T$ is one since $u$ is a unit vector. We assert that the sum of eigenvalues of the matrix-matrix multiplication is equal to the $\ell_2$ norm of the matrix-vector multiplication.
+
+% This gives us a right-hand matrix on which we can induce sparsity. Multiply $uu^T$ element-wise by $zz^T$, and divide by $||u^T z||_2$ to produce a modified
+
+\subsection{Rank-one projection term}
+
+The impact of approximations above is limited in scope, since the problem should have reasonable eigenvalue separation and the current rank-one principal component should be a guess at diagonalizing the problem. Therefore, we add large contributions to the problem (rank-one projections of each variable) which are linear in the diagonal entries of $S$. If the positive coefficients in the entries of $S$ dominate the problem, then the problem reduces to selecting $S = z z^T, z \in \{0,1\}^n, ||z||_0 = k$.
+
+% \subsection{Scaling $S$}
+
+% We used constraints in order to unit-norm the denominator, simplifying and linearizing that part of the program. We would like to add a multiplier to scale up $S_\text{res}$, but with elements remaining bounded by the unit box. However, this multiplier is not known ahead of time, and we do not have quadratic constraints (multiplying a vector entry by another problem variable to yield the other vector entry).
+
+% We introduce a custom cone plug-in: $(S, S_c, c): c*S \succeq S_c, c \ge 0$. We expect to use the existing positive definite and positive scalar cones to supplement this custom constraint.
+
+% \subsubsection{Matrix-scalar multiplication cone is closed under scalar multiplication}
+
+% The relation given above holds after multiplying the matrices and scale factor by a nonnegative scalar.
+
+% \subsubsection{Matrix-scalar multiplication cone is closed under addition}
+
+% For some $(S_a, S_{ca}, c_a), (S_b, S_{cb}, c_b)$, we would like to show that the relation holds for $(S_a+S_b, S_{ca}+S_{cb}, c_a+c_b)$. The matrix norm(s) of the sum are maximized when $S_a$ and $S_b$ share the same diagonalization: $S_a = V^T \Lambda_a V, S_b = V^T \Lambda_b V$, $\Lambda_a, \Lambda_b$ diagonal. Then, the matrix norms of $S_{ca},S_{cb}$ are maximized when the bound is tight, so $S_{ca}=c_a S_a, S_{cb}=c_b S_b$. In only this case, the bound $(c_a + c_b) (S_a + S_b) = S_{ca} + S_{cb}$ is tight, and if any eigenvector differs, then its eigenvalue cannot grow quickly enough to leave the cone.
+
+\subsection{Scaling $S$ using the power cone}
+
+If $S_\text{res}$ is rank-one, then we can recover the vector representing its range, applying some scale factor to be determined. We simply need a square root and arbitrary scaling of the diagonal entries of $S_\text{res}$ (use positive square root, since all entries of $S_\text{res}$ are constrained to be nonnegative). This can be done in conic programming using the power cone $\mathcal{P}_3^{\nicefrac{1}{2}}$, which is the set of triples $(x_1,x_2,x_3) : \sqrt{x_1x_2} \ge |x_3|$. We will have $n$ conic constraints where $x_2$ is some scalar variable not otherwise used, $x_1$ is a diagonal entry of $S_\text{res}$, and $x_3$ is a problem variable taking the rank-one projection as a coefficient.
+
+The free variable $x_2$ in the conic constraints will generally be greater than 1, to scale up the sparsity $S$ entries to a unit value. The $x_3$ problem variables ($z_i$) are constrained by the unit box. The $z_i$ variables are used to sum up the contribution of variance from the rank-one projection, and should be at unity.
+
+\end{document}
