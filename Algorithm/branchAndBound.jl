@@ -81,7 +81,7 @@ function branchAndBound(prob, #problem object
 		else
 			eb = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
-			lower_val = YuanSubset(y)[1]
+			lower_val = SvdExplainedVarianceGreedy(y)
 			return [lower_val true_upper]
 		end
 	end
@@ -185,6 +185,15 @@ function branchAndBound(prob, #problem object
 		return dim
 	end
 
+	function SvdExplainedVarianceGreedy(y)
+		# Values (unit-normed) after thresholding svdExplainedVariance are
+		# meaningless. 
+		support = Hk(svdExplainedVariance, K, y) .!= 0
+		A_sparse = A .* Matrix{Float64}(support')
+		# We use eigenvalue (squared) rather than singular value.
+		return maximum(svd(A_sparse).S .^ 2)
+	end
+
 	# Applies the Yuan and Zhang first order heuristic for localSearchSteps steps
 	# In order to generate a lower bound for the problem at y
 	function YuanSubset(y)
@@ -261,6 +270,22 @@ function branchAndBound(prob, #problem object
 	if m < n/2
 		highDim = true
 	end
+
+	# Vanilla PCA (via SVD), with one principal component. The goal of the left
+	# singular vector (which is a component in terms of the observations, with
+	# the same shape as one of the variables columns) is to predict a good left
+	# singular vector within the k-sparse PCA constraints. In the future, we
+	# might introduce a robustness constraint here (iterations of SVD, followed
+	# by down-weighting outlier observations which exert too much pull on the
+	# right singular vector). We would look for a robust, polynomial time PCA
+	# which produces a PC1 with high similarity to the k-sparse PC1.
+	dataU = svd(A).U[:, 1]
+	# Note: A' U can be computed alternatively from the right-singular vector
+	# instead of the left-singular vector, and multiplied through by the
+	# singular value. This is because dataU is a linear combination of variables
+	# found as columns of A. This hypothetical would probably no longer be the
+	# case if we introduce anything sophisticated in our best-guess PCA.
+	svdExplainedVariance = (A' * dataU) .^ 2
 
 
 	# Uses the Yuan algorithm to generate a warm start if none was provided

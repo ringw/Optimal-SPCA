@@ -103,7 +103,7 @@ end
 
 #Creates a sparse version of a vector by killing smallest components and scaling up
 function Hk(origlist, sparsity, support)
-	list = real(copy(origlist))
+	list = abs.(real(copy(origlist)))
 	ksparse = zeros(length(list))
 	indicesToKeep = (support.==1)
 	dummyvalue = minimum(list)-1
@@ -128,7 +128,7 @@ function selectperm2(x,k)
         kk = 1
     end
     z = collect(1:length(x))
-    return partialsort!(z,1:k,by = (i)->abs(x[i]), rev = true)
+    return partialsort!(z,1:k,by = (i)->x[i], rev = true)
 end
 
 # selects out of x the k largest values
