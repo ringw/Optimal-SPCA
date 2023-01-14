@@ -186,9 +186,16 @@ function branchAndBound(prob, #problem object
 	end
 
 	function SvdExplainedVarianceGreedy(y)
+		ypositive = (y.==1)
+		if sum(ypositive) > 0
+			U = svd(A[:, ypositive]).U[:, 1]
+			svdTreeGreedy = (A' * U) .^ 2
+		else
+			svdTreeGreedy = svdExplainedVariance
+		end
 		# Values (unit-normed) after thresholding svdExplainedVariance are
 		# meaningless. 
-		support = Hk(svdExplainedVariance, K, y) .!= 0
+		support = Hk(svdTreeGreedy, K, y) .!= 0
 		A_sparse = A .* Matrix{Float64}(support')
 		# We use eigenvalue (squared) rather than singular value.
 		return maximum(svd(A_sparse).S .^ 2)
