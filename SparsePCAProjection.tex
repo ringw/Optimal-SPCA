@@ -82,6 +82,100 @@ We are dealing with a quotient of column vectors. For each column vector, use a 
 
 Note - We want to introduce a diagonal matrix to take certain columns from $A$, and zeroes otherwise. We need the global optimum of this upper bound, or else we might have skipped a possible variable selection for SPCA. That is starting to look like a linear programming problem. We can't continue here trying to calculate the gradient (convex optimization) and approximate solution using rounding, because we are looking for an upper bound, not a lower bound.
 
+\subsection{Ipsen (squared)}
+
+The eigenvalue is bounded by:
+
+$$
+|| A^T u ||^2_2
++
+\frac{||(A^T (I-uu^T) A) (A^T u)||_2}{||A^T u||_2}
+$$
+
+The $\ell_2$ norm would require a square root, but we see if we square the value to maximize
+
+\begin{equation*}
+    \begin{aligned}
+        &\left(|| A^T u ||^2_2
+        +
+        \frac{||(A^T (I-uu^T) A) (A^T u)||_2}{||A^T u||_2}\right)^2
+        \\
+        &=
+        || A^T u ||^4_2
+        +
+        2 || A^T u ||_2 ||(A^T (I-uu^T) A) (A^T u)||_2
+        + \frac{||(A^T (I-uu^T) A) (A^T u)||^2_2}{||A^T u||^2_2}
+        \\
+        &=
+        || A^T u ||^4_2
+        +
+        2 || (u^T A) (A^T (I-uu^T) A) (A^T u)||_2
+        + \frac{||(A^T (I-uu^T) A) (A^T u)||^2_2}{||A^T u||^2_2}
+        \\
+        &=
+        || A^T u ||^4_2
+        +
+        2 || ((I-uu^T) A) (A^T u)||^2_2
+        + \frac{||(A^T (I-uu^T) A) (A^T u)||^2_2}{||A^T u||^2_2}
+    \end{aligned}
+\end{equation*}
+
+\subsection{Evaluating sparse solutions}
+
+We considered an arbitrary collection of columns of observations, $A$. We can interpret the first term as:
+
+$$
+|| A^T u ||^4_2
+=
+\mathbf{1}^T
+\left(
+    \begin{matrix}
+        \left< A_1, u \right>^2 \\
+        \left< A_2, u \right>^2 \\
+        ... \\
+        \left< A_n, u \right>^2
+    \end{matrix}
+\right)
+\left(
+    \begin{matrix}
+        \left< A_1, u \right>^2 \\
+        \left< A_2, u \right>^2 \\
+        ... \\
+        \left< A_n, u \right>^2
+    \end{matrix}
+\right)^T
+\mathbf{1}
+$$
+
+If we replace $\mathbf{1}$ with a sparsity-inducing vector $s \in {0,1}^n$, then we can subset variables and check the upper bound.
+
+For the second term (before squaring): $((I-uu^T) A) (A^T u)$, we could use elementwise multiplication first instead of matrix multiplication, then matrix multiplication by the sparsity vector:
+
+$$
+((I - uu^T) A_s) (A_s^T u)
+= (((I - uu^T) A) \cdot (u^T A)) s
+$$
+
+This is a vector, so we can get the squared norm by transposing and multiplying against itself. We have an inner, positive semidefinite matrix which we will need later:
+
+$$
+(((I - uu^T) A) \cdot (u^T A))^T (((I - uu^T) A) \cdot (u^T A))
+$$
+
+\subsection{Semidefinite optimization}
+
+The first two terms allow a matrix to be computed ahead of time, and multiplied on the left and right by $s$. If we bound the denominator of the third term, then we can also write the third term (upper bounded) to admit a sparsity vector $s$. Then we would like to optimize:
+
+$$
+\max_{s \in {0,1}^n} s^T M s
+$$
+
+Our overall approach is to avoid evaluating NP-hard integer optimization at all, so we will solve the convex relaxation:
+
+$$
+\max_{s \in [0,1]^n, ||s||_1 = k} s^T M s
+$$
+
 \section{Future Directions}
 
 We should consider the ability of this Sparse PCA graph search framework to select $d$ principal components with a support of $k$.
