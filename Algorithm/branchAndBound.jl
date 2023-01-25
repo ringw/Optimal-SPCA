@@ -81,7 +81,7 @@ function branchAndBound(prob, #problem object
 		else
 			eb = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
-			lower_val = SvdExplainedVarianceGreedy(y)
+			lower_val = YuanSubset(y)[1]
 			return [lower_val true_upper]
 		end
 	end
@@ -197,14 +197,13 @@ function branchAndBound(prob, #problem object
 		# meaningless. 
 		support = Hk(svdTreeGreedy, K, y) .!= 0
 		A_sparse = A .* Matrix{Float64}(support')
-		# We use eigenvalue (squared) rather than singular value.
-		return maximum(svd(A_sparse).S .^ 2)
+		return svd(A_sparse).U[:, 1]
 	end
 
 	# Applies the Yuan and Zhang first order heuristic for localSearchSteps steps
 	# In order to generate a lower bound for the problem at y
 	function YuanSubset(y)
-		beta = Hk(startingEig, K, y)
+		beta = SvdExplainedVarianceGreedy(y)
 
 			for i = 1:localSearchSteps
 				beta = Hk(sparseTimes(Sigma,beta), K, y)
