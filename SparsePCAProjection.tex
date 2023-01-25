@@ -90,4 +90,31 @@ We should consider the ability of this Sparse PCA graph search framework to sele
 
 Upper and lower bounding the $d+1$ largest eigenvalues in the recursive subproblem could improve bounds when recombining the system. Instead of passing a single additive value to prioritize selecting each variable, an analytic objective function callable would need to be passed for each recursive function call. Multiple features of the subproblem (upper and lower bounds on $d$ eigenvalues, and on their eigenvectors' dot products with the projection vector) would be used to determine the score of the overall problem.
 
+\section{Supplementary Notes}
+
+\subsection{Linearized Ipsen formula}
+
+First, project the data onto a unit vector $v$ of length $m$ (the guess for the left singular vector corresponding to our PCA's right singular vector). The variance explained after the projection can be added up, and is linear. It is still linear after a semidefinite relaxation, and it only uses the diagonal entries of the semidefinite $S$ matrix.
+
+The perturbation (Ipsen) of the rank-one (projected) system is bounded by:
+
+$$
+\frac{n}{d} = \frac{|| (S \circ \Sigma) v||}{\sqrt{\text{Tr }Svv^T}}
+$$
+
+Consider the gradient with respect to the entries of $S$. The denominator can be treated as $d = \sqrt{k S_{ij} + \ell}$, where $k = v_iv_j$ and $\ell$ contains the remaining terms held constant. The numerator can be treated as $n = \sqrt{(pS_{ij} + q)^2 + r}$, where the squared term $pS_{ij} + q$ represents the $i$th component of the matrix-vector product. $p = \Sigma_{ij} \cdot v_j$, and $q = (S \circ \Sigma)_{i*} v - \Sigma_{ij} \cdot S_{ij} \cdot v_j$. The remaining rows of $S \circ \Sigma$ can be ignored, except when the entire quantity $n = ||(S \circ \Sigma)v||$ is needed.
+
+$$
+\frac{\delta}{\delta S_{ij}}
+\frac{\sqrt{(pS_{ij} + q)^2 + r}}{\sqrt{kS_{ij}+\ell}}
+=
+\frac{p(pS_{ij}+q)}{nd}
+-
+\frac{kn}{2d^3}
+=
+\frac{\Sigma_{ij} \cdot v_j \cdot (S \circ \Sigma)_{i*} v}{nd} - \frac{v_i v_j n}{2d^3}
+$$
+
+We should create a linear program of the entries of $S$ (convex programming; we need a solver which can constantly keep the $S$ matrix within the semidefinite cone). The linearization (gradient of our perturbation bound) will be added to the coefficients of the objective function. The gradient can be recomputed at the current $S$ efficiently, so the convex solver will be stopped after every several iterations, and restarted at the latest $S$ and the current linear program.
+
 \end{document}
