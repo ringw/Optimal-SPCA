@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\begin{document}
+
+\section{May 8 notes}
+
+Suppose that the observations are a Hermitian matrix. If they are not, then start from the Gram matrix and take a matrix sqrt of this matrix to be the observation matrix.
+
+We would like to analyze $||\Sigma||_\text{op}$.
+
+$$\Sigma = D^T M^T M D$$
+
+Where $M$ is the Hermitian data matrix, and $D$ is an n-by-k matrix:\\ $\left(\begin{matrix} e_{d_1} & e_{d_2} & ... & e_{d_k} \end{matrix}\right)$, selecting k columns of $M$ using multiplication on the right.
+
+We introduced $u$, which can be initialized to be the left singular vector of $MD$ for some well-performing $D$ ($\sigma = |uMD|_2$ large). This is slightly useful, because inner products with $u$ could be factored out to be computed using entries of $\Sigma$ only, and discard/never synthesize an $M$.
+
+Set $A = D^T M^T u u^T M D$ (large and rank-one), and $E = \Sigma - A$. Analyzing $E$ for different permissible $D$ should give us a smaller recursive problem, compared to analyzing $\Sigma$ (shrinking the problem). However, we would like to produce a new upper-bound deterministically in polynomial time instead.
+
+We found that $E$ is similar to:
+
+$$(I - \frac{1}{\sigma^2} M D u u^T D^T M) M^2$$
+
+We hope that $||E||_\text{op}$ is small compared to $||\Sigma||_\text{op}$. Note that with a change-of-basis using the diagonalization of $M$, then the matrix in parentheses is still a rank-$n-1$ projection matrix. It could have a zero for the dominant eigenvalue of $M^2$, and that is the best case. We want a large sine of the angular comparison of the dominant eigenspaces of the projection matrix on the left and of $M$, and this sine can be bounded using the Davis-Kahan theorem.
+
+Let $P = I - \frac{1}{\sigma^2} MDu u^T D^T M$. For Davis-Kahan, we should come up with our own upper-bound on $||P - \frac{1}{\sigma^2} M^2||_\text{op}$. Davis-Kahan bounds the dissimilarity in the largest eigenspaces of $P$ and $\frac{1}{\sigma^2} M^2$, and if this dissimilarity obtains its maximum value, then the dominant eigenvalue would drop out of $PM^2$ and $||PM^2||_\text{op}$ would be driven by the second-largest eigenvalue of $M^2$ instead.
+
+\end{document}
