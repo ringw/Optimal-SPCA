@@ -37,9 +37,21 @@ To improve performance of Davis-Kahan, scale up the rank-one projection matrix s
 $$
 |\sin\theta|
 \le
-\frac{2||M(I-Duu^TD^T)M||_F}{\min(||MDuu^TD^TM||_\text{op}, \text{Gap}[M^2])}
+\frac{2||M(I-Duu^TD^T)M||_F}{\max(||MDuu^TD^TM||_\text{op}, \text{Gap}[M^2])}
 $$
 
 We need a lower bound on $\text{Gap}[M^2]$. If our gap evaluation is intentionally simplistic (take $\lambda_2 = \text{Tr }M^2 - \lambda_1$), then the gap estimate is nondecreasing with $\lambda_1$. If we choose a putative eigenvector to evaluate $\lambda_1$ for $\text{Gap}[M^2]$, and later we increase our objective function, then our gap using the best sparse PCA solution so far will still hold as a lower bound. Therefore, we use Berk et. al's stochastic best-observed lower bound solution to compute the gap.
+
+\subsection{Follow-up notes}
+
+Referring to Theorem 2, not Theorem 1.
+
+\begin{itemize}
+    \item This linearizes the variable selection as a linear program, which will be solved greedily (trivial optimum). For example, Berk et. al's maximizing the trace is also linear and greedy, and we can directly compare performance to that upper bound. It is becoming extremely cheap to compute these linear coefficients so will they perform reasonably well?
+    \item Does $d=1$ because the eigenvectors being tested are a rank-one subspace?
+    \item Eigenvalue gap in the denominator: It is our choice whether to use $\Sigma$ or $\hat{\Sigma}$ in the denominator.
+    \item We know that $M(I-Duu^TD^T)M$ is PSD so it is the Gram matrix of some matrix, but I need a refresher on what "observation" vectors constitute this matrix. The data vectors cannot be a la $M(I-Duu^TD^T)$, because summing data matrices and then taking the covariance does not equal the sum of two covariance matrices.
+    \item Need to add a first pass, where each variable's contribution is lower-bounded using the rank-one projection, and upper-bounded using Davis-Kahan. Remove variables immediately that can't possibly be in the optimum Sparse PCA, maybe shrinking the problem will still improve performance even with this simple objective.
+\end{itemize}
 
 \end{document}
