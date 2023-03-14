@@ -2,7 +2,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 
-\title{Bounding tree-based Sparse PCA using perturbation theory}
+\title{Perturbation bound on Sparse PCA}
 
 \author{Daniel Ringwalt}
 
@@ -18,13 +18,13 @@ Online singular value decomposition \cite{bunch1978updating} is seen as a time-s
 
 In a graph search, we will already have $i$ variables committed to a new covariance computation, and there are still $\binom{n-i}{k-i}$ possible results. Upper bounding the $k$-sparse SVD solution is still challenging. Current bounds (using trace and Gershgorin circle on all possible subsets) avoid any decomposition or partial solution of the problem. We suggest that the diagonalization of the subproblem ($i$ x $i$ covariance matrix) is the best starting point for a more intensive search for an upper bound. There ought to be a less unwieldy, and better performing, bound on this partially decomposed problem, than the approach of successive updates shown here.
 
-\section{Sparse PCA for dense random data}
+\section{Sparse PCA problem instance}
 
-As input, we take a fully determined $n$ x $n$ covariance matrix (rank is actually $n-1$ due to the loss of one degree of freedom from centering the data). Later, covariance values can be computed on-the-fly in a separate code path, for datasets which are rank-deficient (few observations) \cite{berk2019certifiably}. Our covariance will usually be unit-scaled so that each variable has a sample variance of 1.
+Berk et. al use $\Sigma \succeq 0$ as a dense, expected high-rank, covariance matrix input. An alternate mode uses the decomposition $\Sigma = M^T M$ in the case of few observations in $M$, for low-rank inputs, but we will focus on dense $\Sigma$. In either case, the estimator for the covariance has alreaday been computed. We may work with $\Sigma$ with unbiased variance estimate on the diagonals, on $M = \sqrt{\Sigma} = V \text{Diag}(\sigma) V^T$ (where $\Sigma = V \text{Diag}(\sigma^2) V^T$), but not on original observations.
 
-The centered data matrix $D: m$ x $n$ will only be considered theoretically. The covariance matrix $\Sigma: n$ x $n$ contains entries $\Sigma_{ij} = \frac{\left< d_i, d_j \right>}{n-1}$.
+The sparse PCA solution will be a matrix $D : n\text{ x }k$, where columns are taken from $e_1,\dots,e_n$ (selecting k variables). Then we want $D$ which maximizes $||MD||_2^2$. Sparse PCA branch-and-bound will immediately start removing columns from $M$, so we cannot analyze the eigenvalues/singular values of $M$ as a Hermitian eigenproblem.
 
-$$\Sigma = \frac{1}{n-1} D^T D$$
+Importantly, the majority of iterations of Sparse PCA branch-and-bound provide $D_i : n\text{ x }i, i < k$, where every column in $D_i$ must appear in $D$.
 
 \section{Rank-one updates}
 
@@ -65,85 +65,32 @@ This formula performs stably for infinitesimal updates. The inverted diagonal ma
 
 This technique is under-utilized so far, for accelerating this combinatorial linear algebra problem. Generally, combinatorial sparse PCA has not moved from research into practicum (productionizing and optimizing a particular algorithm). Time and space complexity is dominated by tracking and multiplying through a $k$ x $k$ eigenvector matrix, and big-O performance of each step in a combinatorial procedure has not changed.
 
-\section{Bounding the rank-one update}
+\section{Lower bound on Sparse PCA from $D_i$}
 
-Using bounds on the dominant eigenvalue(s) (absolute value upper and lower), and eigenvector(s) (maximum disturbance $\theta$), we can explore the problem space iteratively in polynomial time instead of factorial time. We need the two most dominant eigenvalues (largest: $\lambda^{k-1}_1, v^{k-1}_1$, second largest: $\lambda^{k-1}_2, v^{k-1}_2$).
+At each iteration, for $MD_i = U_i \text{Diag}(\sigma_i) V_i^T$ (SVD), we have $\sigma_i^2$ and $V_i$ provided to us from the Hermitian eigenproblem (rank-one updates). $U_i^1$ (dominant left eigenvector) ought to start approaching the linear combination of $k$ variables which will follow from the optimal Sparse PCA solution ($U_k^1$). The Sparse PCA branch-and-bound lower and upper bounds will refer to a dominant left singular vector estimate $u$, which here will be implemented using $U_k^1$.
 
-At this point, the $\sigma^\prime$ update vector needs to be multiplied on the left by $\left(V^{k-1}\right)^T$, producing updates $w$ to be added to the diagonal matrix. The enhanced bounds on $\lambda^k$ \cite{zhu2019rank} are the bounds which yield closed intervals:
+Our lower bound on the Hermitian eigenproblem $M^T M$ follows from the factor $M$, projecting columns of $M$ onto a smaller subspace. Use $uu^T$ as our projection matrix. Then, $||(uu^T MD)^T (uu^T MD)||_2 = ||(uu^T MD)||_2^2 = ||(MD)^T u||_2^2$, which is a lower bound linear in the columns of $M$ being selected. Similar to the upper bound from the trace, this is a greedy optimization problem.
 
-$$
-\lambda^{k-1}_1
-<
-\lambda^k_1
-\le
-\lambda^{k-1}_1 + u_1(w_1, \Sigma_{kk}, \lambda^{k-1}_1 - \lambda^{k-1}_2)
-$$
+\section{Upper bound on Sparse PCA from $D_i$}
+
+Upper bound will require a detailed analysis of the perturbation from our rank-one projection to the full-rank matrix $\Sigma$.
 
 $$
-\lambda^{k-1}_2
-+
-l_2(w_1, w_2, \lambda^{k-1}_1 - \lambda^{k-1}_2)
-\le
-\lambda^k_2
-<
-\lambda^{k-1}_1
+D^T \Sigma D = A + E \text{ where } A = D^T M uu^T MD, E = D^T M (I-uu^T) MD
 $$
 
+In the optimal case, $u$ would be the dominant singular vector of $MD_k$, which is a matrix which spans a range containing the range of $MD_i$. For any $u$, we have:
+
 $$
-\lambda^k_2
-\le
-\lambda^{k-1}_2
-+
-u_2(w_1, w_2, \Sigma_{kk}, \lambda^{k-1}_2 - \lambda^{k-1}_3)
+||A||_2 \le \left(\sigma_1(MD)\right)^2,
+||E||_2 \ge \left(\sigma_2(MD)\right)^2
 $$
 
-% The definition of Zhu's functions will be included as a supplement. One note is that $\lambda^{k-1}_2 - \lambda^{k-1}_3$ has trivial bounds on it, but will not be tracked explicitly. Defining this gap as ``$g$'', we have an important derivation for bounding $u_2$:
+Additionally, Weyl's inequalities apply, and they may produce a reasonable (not tight) upper bound:
 
-% $$
-% \frac{\delta u_2}{\delta g} \propto -1 + \frac{\delta}{\delta g} \sqrt{(g + a)^2 - bg}
-% =
-% -1 + \frac{2(g+a) - b}{2\sqrt{(g+a)^2 - bg}}
-% $$
-
-% Seeking extrema at $\frac{\delta u_2}{\delta g} = 0$:
-
-% $$
-% (g + a) - \frac{b}{2} = \sqrt{(g+a)^2 - bg}
-% $$
-
-% $$
-% (g+a)^2 - b(g+a) + \frac{b}{4} = (g+a)^2 - bg
-% $$
-
-% This will yield a closed-form for one local extreme of $u_2$ with respect to $g$. Therefore, we can bound $u_2$ while growing our columns of data, without tracking additional eigenvalues.
-
-% Zhu's functions will be included as a supplement. Further functions will be used for tracking $k$ eigenvalues (including $\lambda_k^{k-1} = 0 \to \lambda_k^k \not = 0$).
-
-% We can almost get away with approximating the further gap to the next eigenvalue. However, all perturbed eigenvalue bounds are used for calculating the eigenvector disturbance upper bound.
-
-Zhu's functions will be included as a supplement. We bound $u_2$ using any possible gap $\lambda_2^{k-1} - \lambda_3^{k-1}$, and we find that $u_2$ varies as a quadratic, with one extreme point. Therefore, we need to evaluate $u_2$ at 2 or 3 possible values of the eigenvalue difference (minimum possible, maximum possible, and an extreme point). However, this shows that we do not need to track bounds on all eigenvalues, in order to effectively bound the dominant eigenvalue(s) after several updates.
-
-\subsection{Eigenvector disturbance}
-
-Calculate the perturbed eigenvectors within our diagonal system of $k-1$ variables: $x_i v_i = (\Lambda^{k-1} - I(\Lambda^k)_{ii})^{-1} w$
-
-For no disturbance, we would have $v = e_1$ when considering eigenvalue $\lambda_1^k$. The contribution of other components is given by $|\sin\theta|$, where $\cos\theta = |v_1|$.
-
-We would maximize $\sin\theta$ by considering $\lambda_1^k = \lambda_1^{k-1} + u_1$ (perturb the eigenvalue as far as possible). Within the same formula, we want to consider a smaller distance from $\lambda_i^{k-1}$ to $\lambda_1^k$ before taking the reciprocal (those eigenvalues have a larger contribution to rotating the new eigenvector). This provides an upper bound on $|v_1|$ for any possible update vector.
-
-Then, we can retain the basis that we have been using, from $V^{k-1}$ and appending basis vector $e_k$. Using the system $\Sigma^k$ (with uncertainty present), we may rotate updates in $\sigma_{k+1}^\prime$ into the first component. This gives us a minimum and maximum $w_1$. Furthermore, the $u_i$ function may vary as a qudratic with $w_i$, so we will consider a possible extrema point, or either bound on $w_1$ may produce the upper bound $u_1$.
-
-\section{Sparse PCA upper bounding algorithm}
-
-We presented a first iteration, going from an $i$-subset to an $i+1$-subset. We would like to get to a $k$-subset, in not too many steps (or this decomposition will perform worse than much cheaper upper bounds). PCA is sensitive to the scales or duplication of variables, so repeated applications would greedily choose one new variable from the available set, and keep choosing it over and over again. We should remove the variable which was used to maximize $u_1$ from consideration for $u_1$ again. This is starting to look like a greedy algorithm that could be used to select all $k$ variables. However, a different variable might have produced the most extreme bounds for $l_2,u_2$.
-
-The algorithm is not greedy, because we keep considering the entire search space when growing $l_2,u_2$. Therefore, we don't constrain $\lambda_2$ incorrectly, and behavior will arise where $\lambda_2$ influences our $\lambda_1$ (the updates could have the sophistication that we expect from eigenvalue updates, with very loose terms on the possible updates).
-
-\section{Limitations}
-
-Our $\lambda_2$ bounds could grow more quickly than our $\lambda_1$ bounds, and when our formula suggests a lower bound on $\lambda_1$ and upper bound on $\lambda_2$ which intersect, then the validity would probably break down. Without an adequate depth in our search tree, we might terminate without a bound because our updates are larger than the size of the subproblem (e.g. $i=3,k=10$). Therefore, we might only apply this bound when $\frac{i}{k} >> \frac{1}{2}$. The procedure is particularly useful, and should always be used, for evaluating a new node at $i=k-1$. It is cheaper than diagonalizing $n-k$ matrices (switching over to brute-force at the last level of the tree).
-
-Spectral theory lower bounding the possible upper bound would be a useful finding. We could show that branch-and-bound sparse PCA will never constrain its upper bounds beyond a certain level of performance.
+$$
+||D^T \Sigma D||_2 \le ||A||_2 + ||E||_2
+$$
 
 \begin{thebibliography}{9}
     \bibitem{berk2019certifiably} Berk, Lauren, \& Dimitris Bertsimas. "Certifiably optimal sparse principal component analysis." Mathematical Programming Computation 11.3 (2019): 381-420.
