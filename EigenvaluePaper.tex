@@ -22,54 +22,56 @@ In a graph search, we will already have $i$ variables committed to a new covaria
 
 Berk et. al use $\Sigma \succeq 0$ as a dense, expected high-rank, covariance matrix input. An alternate mode uses the decomposition $\Sigma = M^T M$ in the case of few observations in $M$, for low-rank inputs, but we will focus on dense $\Sigma$. In either case, the estimator for the covariance has alreaday been computed. We may work with $\Sigma$ with unbiased variance estimate on the diagonals, on $M = \sqrt{\Sigma} = V \text{Diag}(\sigma) V^T$ (where $\Sigma = V \text{Diag}(\sigma^2) V^T$), but not on original observations.
 
-The sparse PCA solution will be a matrix $D : n\text{ x }k$, where columns are taken from $e_1,\dots,e_n$ (selecting k variables). Then we want $D$ which maximizes $||MD||_2^2$. Sparse PCA branch-and-bound will immediately start removing columns from $M$, so we cannot analyze the eigenvalues/singular values of $M$ as a Hermitian eigenproblem.
+The sparse PCA solution will be a matrix $D : n\text{ x }k$, where columns are taken from $e_1,\dots,e_n$ (selecting k variables). Then we want $D$ which maximizes $||MD||_2^2 = ||D^T \Sigma D||_2$. Sparse PCA branch-and-bound will immediately start removing columns from $M$, so we cannot analyze the eigenvalues/singular values of $M$ as a Hermitian eigenproblem.
 
 Importantly, the majority of iterations of Sparse PCA branch-and-bound provide $D_i : n\text{ x }i, i < k$, where every column in $D_i$ must appear in $D$.
 
-\section{Rank-one updates}
+% \section{Rank-one updates}
 
-Several treatments of sparse PCA/sparse recovery have appended rank-one or low-rank data to a subset of the data matrix, and desired an online SVD. However, fast perturbations of the subsetted covariance matrix are still a novel algorithmic detail.
+% Several treatments of sparse PCA/sparse recovery have appended rank-one or low-rank data to a subset of the data matrix, and desired an online SVD. However, fast perturbations of the subsetted covariance matrix are still a novel algorithmic detail.
 
-Consider a subset of $k-1$ variables, and an existing positive definite diagonalized matrix $\Sigma^{k-1} = V^{k-1} \Lambda^{k-1} \left(V^{k-1}\right)^T$. We should treat the matrices as having an additional $k$th row and column (zeros in the covariance matrix and diagonal matrix, and the basis vector $e_k$ in $V$).
+% Consider a subset of $k-1$ variables, and an existing positive definite diagonalized matrix $\Sigma^{k-1} = V^{k-1} \Lambda^{k-1} \left(V^{k-1}\right)^T$. We should treat the matrices as having an additional $k$th row and column (zeros in the covariance matrix and diagonal matrix, and the basis vector $e_k$ in $V$).
 
-Next, consider appending the variable to the subset, which will go at location $k$. For the matrix $\frac{1}{n-1} D D^T$, we have a rank-one update $\frac{1}{n-1} D D^T + \frac{1}{n-1} d_k d_k^T$. This matrix has the same spectrum as the updated covariance matrix $\Sigma^k$.
+% Next, consider appending the variable to the subset, which will go at location $k$. For the matrix $\frac{1}{n-1} D D^T$, we have a rank-one update $\frac{1}{n-1} D D^T + \frac{1}{n-1} d_k d_k^T$. This matrix has the same spectrum as the updated covariance matrix $\Sigma^k$.
 
-Using the singular vectors of $D$, we can produce another matrix which has the same spectrum: $\Lambda^{k-1} + \frac{1}{n-1} \left(V^{k-1}\right)^T\sigma_k^\prime (\left(V^{k-1}\right)^T \sigma_k^\prime)^T$, where $\sigma_k^\prime$ is a newly constructed column vector and the first $k-1$ elements come from the $k$th column of $\Sigma$, taken for the $k-1$ subset of covariates seen so far. $\left(\sigma_k^\prime\right)_k$ is constructed to preserve the trace:
-
-$$
-\text{Tr}\left(\frac{1}{n-1} D D^T + \frac{1}{n-1} d_k d_k^T\right)
-= \text{Tr}\left( \Lambda^{k-1} + \frac{1}{n-1} \left(V^{k-1}\right)^T\sigma_k^\prime (\left(V^{k-1}\right)^T \sigma_k^\prime)^T \right)
-$$
-
-Consider the covariance matrix $\Sigma$ of the subsets of variables $\Sigma^{k-1}, \Sigma^k$. The change in trace is due to inserting a new variance on the diagonal: $\Sigma_{kk}$.
-
-$$
-\text{Tr}\left( \frac{1}{n-1} \sigma_k^\prime \left(\sigma_k^\prime\right)^T \right) = \frac{1}{n-1} \sum_{i=1}^k \left(\sigma_k^\prime\right)^2 = \Sigma_{kk}
-$$
-
-$$
-\left(\sigma_k^\prime\right)_k = \sqrt{\Sigma_{kk} - \sum_{i=1}^{k-1} \left(\sigma_k^\prime\right)_i^2}
-$$
-
-\subsection{Solving the rank-one update}
-
-New eigenvalues are found analytically, by expanding the characteristic polynomial. The characteristic polynomial after the rank-one update is divided through, to produce a sum of $k$ rational functions which have no zero, and one pole at exactly one original eigenvalue. After the sum, we have $k$ zeroes, and every zero is separated from the next zero by one of the $k$ poles. The updated eigenvalues (at the zeroes) are at least slightly perturbed from the original locations. The equations are solved by a root-finding approximation, but quickly converging up to machine epsilon, using the LAPACK \texttt{slaed9} helper function.
-
-For the eigenvalue numbered $i$, the updated eigenvector is:
-
-$$x_i v_i = V^{k-1} (\Lambda^{k-1} - I \left(\Lambda^k\right)_{ii})^{-1} \sigma_k^\prime$$
-
-This is divided through by a scale factor $x_i$ determinied by taking the norm.
-
-This formula performs stably for infinitesimal updates. The inverted diagonal matrix is ill-conditioned due to the large diagonal entry at $i$, so the result would be infinitesimally close to extracting one original eigenvector using $e_i$.
-
-This technique is under-utilized so far, for accelerating this combinatorial linear algebra problem. Generally, combinatorial sparse PCA has not moved from research into practicum (productionizing and optimizing a particular algorithm). Time and space complexity is dominated by tracking and multiplying through a $k$ x $k$ eigenvector matrix, and big-O performance of each step in a combinatorial procedure has not changed.
-
+% Using the singular vectors of $D$, we can produce another matrix which has the same spectrum: $\Lambda^{k-1} + \frac{1}{n-1} \left(V^{k-1}\right)^T\sigma_k^\prime (\left(V^{k-1}\right)^T \sigma_k^\prime)^T$, where $\sigma_k^\prime$ is a newly constructed column vector and the first $k-1$ elements come from the $k$th column of $\Sigma$, taken for the $k-1$ subset of covariates seen so far. $\left(\sigma_k^\prime\right)_k$ is constructed to preserve the trace:
+% 
+% $$
+% \text{Tr}\left(\frac{1}{n-1} D D^T + \frac{1}{n-1} d_k d_k^T\right)
+% = \text{Tr}\left( \Lambda^{k-1} + \frac{1}{n-1} \left(V^{k-1}\right)^T\sigma_k^\prime (\left(V^{k-1}\right)^T \sigma_k^\prime)^T \right)
+% $$
+% 
+% Consider the covariance matrix $\Sigma$ of the subsets of variables $\Sigma^{k-1}, \Sigma^k$. The change in trace is due to inserting a new variance on the diagonal: $\Sigma_{kk}$.
+% 
+% $$
+% \text{Tr}\left( \frac{1}{n-1} \sigma_k^\prime \left(\sigma_k^\prime\right)^T \right) = \frac{1}{n-1} \sum_{i=1}^k \left(\sigma_k^\prime\right)^2 = \Sigma_{kk}
+% $$
+% 
+% $$
+% \left(\sigma_k^\prime\right)_k = \sqrt{\Sigma_{kk} - \sum_{i=1}^{k-1} \left(\sigma_k^\prime\right)_i^2}
+% $$
+% 
+% \subsection{Solving the rank-one update}
+% 
+% New eigenvalues are found analytically, by expanding the characteristic polynomial. The characteristic polynomial after the rank-one update is divided through, to produce a sum of $k$ rational functions which have no zero, and one pole at exactly one original eigenvalue. After the sum, we have $k$ zeroes, and every zero is separated from the next zero by one of the $k$ poles. The updated eigenvalues (at the zeroes) are at least slightly perturbed from the original locations. The equations are solved by a root-finding approximation, but quickly converging up to machine epsilon, using the LAPACK \texttt{slaed9} helper function.
+% 
+% For the eigenvalue numbered $i$, the updated eigenvector is:
+% 
+% $$x_i v_i = V^{k-1} (\Lambda^{k-1} - I \left(\Lambda^k\right)_{ii})^{-1} \sigma_k^\prime$$
+% 
+% This is divided through by a scale factor $x_i$ determinied by taking the norm.
+% 
+% This formula performs stably for infinitesimal updates. The inverted diagonal matrix is ill-conditioned due to the large diagonal entry at $i$, so the result would be infinitesimally close to extracting one original eigenvector using $e_i$.
+% 
+% This technique is under-utilized so far, for accelerating this combinatorial linear algebra problem. Generally, combinatorial sparse PCA has not moved from research into practicum (productionizing and optimizing a particular algorithm). Time and space complexity is dominated by tracking and multiplying through a $k$ x $k$ eigenvector matrix, and big-O performance of each step in a combinatorial procedure has not changed.
+ 
 \section{Lower bound on Sparse PCA from $D_i$}
 
-At each iteration, for $MD_i = U_i \text{Diag}(\sigma_i) V_i^T$ (SVD), we have $\sigma_i^2$ and $V_i$ provided to us from the Hermitian eigenproblem (rank-one updates). $U_i^1$ (dominant left eigenvector) ought to start approaching the linear combination of $k$ variables which will follow from the optimal Sparse PCA solution ($U_k^1$). The Sparse PCA branch-and-bound lower and upper bounds will refer to a dominant left singular vector estimate $u$, which here will be implemented using $U_k^1$.
+At each iteration, for $MD_i = U_i \text{Diag}(\sigma_i) V_i^T$ (SVD), we have $\sigma_1^2$ and $V_i$ provided to us from the Hermitian eigenproblem (rank-one updates). $U_i^1$ (dominant left eigenvector) ought to start approaching the linear combination of $k$ variables which will follow from the optimal Sparse PCA solution ($U_k^1$). The Sparse PCA branch-and-bound lower and upper bounds will refer to a dominant left singular vector estimate $u$, which here will be implemented using $U_k^1$.
 
 Our lower bound on the Hermitian eigenproblem $M^T M$ follows from the factor $M$, projecting columns of $M$ onto a smaller subspace. Use $uu^T$ as our projection matrix. Then, $||(uu^T MD)^T (uu^T MD)||_2 = ||(uu^T MD)||_2^2 = ||(MD)^T u||_2^2$, which is a lower bound linear in the columns of $M$ being selected. Similar to the upper bound from the trace, this is a greedy optimization problem.
+
+After greedily selecting $k$ variables in the subspace, then we can take those $k$ rows and columns in the original Hermitian eigenproblem. This gives us a concrete solution $D_k$ and a new lower bound on the objective value (not the rank-one problem, but a new $k$-by-$k$ Hermitian eigenproblem): $(\sigma_1^\ell(MD_k))^2$.
 
 \section{Upper bound on Sparse PCA from $D_i$}
 
@@ -86,16 +88,72 @@ $$
 ||E||_2 \ge \left(\sigma_2(MD)\right)^2
 $$
 
-Additionally, Weyl's inequalities apply, and they may produce a reasonable (not tight) upper bound:
+Additionally, Weyl's inequalities apply, and they may produce a reasonable (but not tight) upper bound:
 
 $$
 ||D^T \Sigma D||_2 \le ||A||_2 + ||E||_2
 $$
 
+Set $\cos\theta = \left< v_1, u \right>$, where we expect an eigenspace with multiplicity 1: $(D^T \Sigma D) v_1 = (\sigma_1(MD))^2 v_1$. Apply Davis-Kahan to the dominant eigenvector $v_1$ of $D^T \Sigma D$, and to the range of $D^TM uu^T MD$:
+
+$$
+|\sin\theta| \le \frac{||D^T \Sigma D - D^T M u u^T M D||_F}{||D^T \Sigma D||_2} = \frac{||E||_F}{(\sigma_1(MD))^2}
+$$
+
+% We will need an upper bound on $\cos\theta$ as well, because we hope that $E$'s range will have a high angular distance with the original dominant eigenvector:
+
+% $$
+% |\cos\theta|
+% \le
+%\frac{||D^T \Sigma D - E||_F}{||D^T \Sigma D||_2 - (\sigma_2((I-uu^T)MD))^2} =
+% \frac{||A||_F}{(\sigma_1(MD))^2 - (\sigma_2((I-uu^T)MD))^2}
+% $$
+
+% For a vector $v$, there is a function $f(v)$ contracting the vector to a new vector of equal $\ell_2$ norm, where the first entry is $\left<v, u\right>$ and the second entry makes $||v||_2$ whole. Apply a change of basis to $A$ and $E$ to produce similar matrices, such that the first basis vector is along the original direction of $u$. Then, upper-bound and absolute value the $\ell_2$ norm of the 1 x 1, $n-1$ x 1, 1 x $n-1$, and $n-1$ x $n-1$ blocks. This contracted matrix has an $\ell_2$ norm which is the upper bound of the $\ell_2$ norm of the original matrix.
+
+% For $A$, we have a simple contraction, which we call $B$: $$B = \left(\begin{matrix}||D^T Mu||_2 & 0 \\ 0 & 0 \end{matrix}\right)$$
+
+% The contracted $A$ is diagonalized because it is rank-one, and it was projected onto the space spanned by $u$, which is a basis vector.
+
+We are testing an angular distance between principal eigenvectors. A sine of zero has the consequence that $u$ is the principal eigenvector of $D^T \Sigma D$, aligning with $||E||_F$ minimized. Then we would have $||E||_2 = (\sigma_2(MD))^2$ (the first singular value was eliminated without otherwise affecting the SVD). There is action on the first singular value of $(I-uu^T)MD$ given by $\sin\theta$, and action on the remaining singular values (upper-bounded by $\sigma_2(MD)$) given by $\cos\theta$. These projections of $(I-uu^T)MD$ onto further smaller subspaces have orthogonal ranges, so we have: $$\sigma_1((I-uu^T)MD) \le \sqrt{(\sigma_1(MD))^2 \sin^2\theta + (\sigma_2(MD))^2 \cos^2\theta}$$
+
+Now, our bound on $||E||_2$ depends on $||E||_F^2$.
+If $||E||^2$ can be derived (or bounded) as a linear function in the indicator variables for the entries of $D$, then we will produce a new linear program to maximize $(\sigma_1(MD))^2 \le ||A|| + ||E||$. The coefficients should produce a tighter bound than the linear program which optimizes Sparse PCA using the trace of the submatrix. As part of linearizing the problem, $\sigma_2(MD)$ will be upper-bounded using an upper bound on the trace and the lower bound on $\sigma_1(MD)$: $(\sigma_2(MD))^2 \le \text{Tr } D^T\Sigma D - (\sigma_1(MD))^2$.
+
+\subsection{Nonlinear optimization from matrix contraction}
+
+We can treat these entries as a 2-by-1 matrix, a contraction of $(I-uu^T)MD$ which upper-bounds its action (the operator norm). Without affecting the operator norm, we can accept inputs which are in the same two-dimensional contracted space as the output which we create. Call the contracted matrix $C$.
+
+$$C =
+\left(
+    \begin{matrix}
+        \sigma_1(MD) \sin^2\theta
+        &
+        \sigma_1(MD) \sin\theta\cos\theta
+        \\
+        \sigma_2(MD) \sin\theta\cos\theta
+        &
+        \sigma_2(MD) \cos^2\theta
+    \end{matrix}
+\right)
+$$
+
+In this vector space, our rank-one matrix $uu^TMD$ is modeled as:
+
+$$B =
+\left(
+    \begin{matrix}
+        ||D^TMu||_2 & 0 \\ 0 & 0
+    \end{matrix}
+\right)
+$$
+
+We can expand out the result $B^2+C^2$, and create a formula which upper-bounds $(\sigma_1(MD))^2$ using Gershgorin. We would need to maximize (e.g. linear relaxation in $D$, and nonlinear objective function), or further simplify (e.g. substantial simplifications and an upper bound which is linear in the entries in $D$), this expression.
+
 \begin{thebibliography}{9}
     \bibitem{berk2019certifiably} Berk, Lauren, \& Dimitris Bertsimas. "Certifiably optimal sparse principal component analysis." Mathematical Programming Computation 11.3 (2019): 381-420.
     \bibitem{bunch1978updating} Bunch, James R., \& Christopher P. Nielsen. "Updating the singular value decomposition." Numerische Mathematik 31.2 (1978): 111-129.
-    \bibitem{zhu2019rank} Zhu, L., Peng, X. \& Liu, H. Rank-one perturbation bounds for singular values of arbitrary matrices. J Inequal Appl 2019, 138 (2019).
+    % \bibitem{zhu2019rank} Zhu, L., Peng, X. \& Liu, H. Rank-one perturbation bounds for singular values of arbitrary matrices. J Inequal Appl 2019, 138 (2019).
 \end{thebibliography}
 
 \end{document}
