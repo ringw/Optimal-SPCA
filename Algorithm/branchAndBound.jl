@@ -1,4 +1,4 @@
-using LinearAlgebra, Printf, Arpack
+using LinearAlgebra, Printf, Arpack, COSMO, SparseArrays
 function branchAndBound(prob, #problem object
 		K; # target sparsity
 		outputFlag = 3, # 1, 2, or 3 depending on level of detail sought in output
@@ -79,7 +79,7 @@ function branchAndBound(prob, #problem object
 			val, ~ = bbMyeigmax(abs.(y), 0)
 			return [val val]
 		else
-			eb = eigen_bound(y, oldub)
+			eb = eigen_bound(y)
 			true_upper, ~ = bbMyeigmax(y, eb)
 			lower_val = YuanSubset(y)[1]
 			return [lower_val true_upper]
@@ -93,53 +93,24 @@ function branchAndBound(prob, #problem object
 	# oldub (the upper bound from the parent node) provides a maximum value on
 	# the upper bound at y.  It is used here to terminate the gershgorin calculation early
 	# if the gershgorin bound is higher than oldub
-	function eigen_bound(y, oldub)
+	function eigen_bound(y)
 		ypositive = (y.==1)
-		numpositive = sum(ypositive)
-		stillneed = K-numpositive
+		yfalse = (y.==0)
 
-		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
-		#Inspired by gershgorin circle theorem
-		#Hard to scale well
-		stillneed = K-numpositive
-		startingsums = sum(absSigma[:, ypositive],dims=2)
-
-		eb1=0
-		cutoff = oldub*(1-1e-6)
-
-		for i=1:length(y) # scanning over all columns
-			if y[i]==-1 || y[i]==1 # which columns to consider
-			    newsum = startingsums[i] # must include these rows
-			    added = 0
-			    if y[i]==-1 
-			    	# if we choose column i, we must choose row i
-			    	newsum = newsum + absSigma[i,i]
-			    	added = 1
-			    end
-			    j=1
-			    while added < stillneed
-			        candidateIndex = permMat[i,j]
-			        if y[candidateIndex]==-1 && candidateIndex != i
-			            newsum = newsum + absSigma[i,candidateIndex]
-			            added = added + 1
-			        end
-			        j=j+1
-			    end
-			    if newsum>eb1
-			        eb1=newsum
-			        if newsum>cutoff
-			    		break
-			    	end
-			    end
-			end
-		end
-
-		#based on how the trace is a bound on the eigenvalues since they're all positive
-		startingsums = sum(diagSigma[ypositive])
-		indicesLeft = sortedOrder[y.==-1]
-		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
-
-		return min(eb1,eb2)
+		sigma_opt = -Sigma .* Sigma
+		sigma_opt[diagind(sigma_opt)] += sum(sigma_opt[:, ypositive], dims=2)
+		sigma_opt[:, ypositive] .= 0
+		sigma_opt[ypositive, :] .= 0
+		sigma_opt[:, yfalse] .= 0
+		sigma_opt[yfalse, :] .= 0
+		sigma_opt[diagind(sigma_opt)[ypositive]] .= 10000
+		update!(model, q=vec(sigma_opt))
+		result = COSMO.optimize!(model)
+		frob_result = sqrt(-(
+			result.obj_val
+			- 10000 * sum(ypositive)
+		))
+		frob_result 
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
@@ -254,6 +225,30 @@ function branchAndBound(prob, #problem object
 
 	A = prob.data
 	m, n = size(A)
+	N = n * n
+
+	model = COSMO.Model();
+	q = vec(-Sigma .* Sigma)
+
+	row_c = repeat(Matrix(-1.0I, n, n), inner=(1, n))
+	for i = 1:n
+		row_c[i, 1 + (n+1)*(i-1)] = K-1
+	end
+	row_c = COSMO.Constraint(row_c, zeros(n), COSMO.ZeroSet)
+
+	assemble!(
+		model,
+		spzeros(N, N),
+		q,
+		[
+			# PSD
+			COSMO.Constraint(sparse(1.0I, N, N), zeros(N), COSMO.PsdCone),
+			# [0, 1] constraint
+			COSMO.Constraint(sparse(1.0I, N, N), zeros(N), COSMO.Box(zeros(N), ones(N))),
+			# Trace == K
+			COSMO.Constraint(vec(Matrix(1.0I, n, n))', -Float64(K), COSMO.ZeroSet),
+			row_c,
+		])
 
 	# detects if high dimenisonal problem, in which case
 	# methods should use A'A not Sigma for eigenvalue computations
