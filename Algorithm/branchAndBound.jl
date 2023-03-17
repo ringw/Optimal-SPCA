@@ -71,7 +71,7 @@ function branchAndBound(prob, #problem object
 	# oldub is the upper bound of the parent node, which provides a maximum value
 	# that the upper bound at y could have.  Feeding oldub into eigen_bound helps
 	# reduce time spent in that function
-	function return_bounds(y, oldub)
+	function return_bounds(y)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
 			return [val val]
@@ -79,7 +79,7 @@ function branchAndBound(prob, #problem object
 			val, ~ = bbMyeigmax(abs.(y), 0)
 			return [val val]
 		else
-			eb = eigen_bound(y, oldub)
+			eb = eigen_bound(y)
 			true_upper, ~ = bbMyeigmax(y, eb)
 			lower_val = YuanSubset(y)[1]
 			return [lower_val true_upper]
@@ -93,8 +93,9 @@ function branchAndBound(prob, #problem object
 	# oldub (the upper bound from the parent node) provides a maximum value on
 	# the upper bound at y.  It is used here to terminate the gershgorin calculation early
 	# if the gershgorin bound is higher than oldub
-	function eigen_bound(y, oldub)
+	function eigen_bound(y)
 		ypositive = (y.==1)
+		ynegative = (y.==0)
 		numpositive = sum(ypositive)
 		stillneed = K-numpositive
 
@@ -104,35 +105,11 @@ function branchAndBound(prob, #problem object
 		stillneed = K-numpositive
 		startingsums = sum(absSigma[:, ypositive],dims=2)
 
-		eb1=0
-		cutoff = oldub*(1-1e-6)
-
-		for i=1:length(y) # scanning over all columns
-			if y[i]==-1 || y[i]==1 # which columns to consider
-			    newsum = startingsums[i] # must include these rows
-			    added = 0
-			    if y[i]==-1 
-			    	# if we choose column i, we must choose row i
-			    	newsum = newsum + absSigma[i,i]
-			    	added = 1
-			    end
-			    j=1
-			    while added < stillneed
-			        candidateIndex = permMat[i,j]
-			        if y[candidateIndex]==-1 && candidateIndex != i
-			            newsum = newsum + absSigma[i,candidateIndex]
-			            added = added + 1
-			        end
-			        j=j+1
-			    end
-			    if newsum>eb1
-			        eb1=newsum
-			        if newsum>cutoff
-			    		break
-			    	end
-			    end
-			end
-		end
+		sortSigma = absSigma
+		sortSigma[:, ypositive .| ynegative] .= 0
+		sortSigma[ypositive .| ynegative, :] .= 0
+		sortSigma = -mapslices(sort, -sortSigma, dims=2)
+		eb1 = maximum(startingsums + sum(sortSigma[begin:end, 1:stillneed], dims=2))
 
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
@@ -375,7 +352,7 @@ function branchAndBound(prob, #problem object
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub = return_bounds(newNodes[:,i], oldub)
+			lb, ub = return_bounds(newNodes[:,i])
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
