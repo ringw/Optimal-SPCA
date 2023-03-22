@@ -99,17 +99,27 @@ function branchAndBound(prob, #problem object
 		numpositive = sum(ypositive)
 		stillneed = K-numpositive
 
-		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
-		#Inspired by gershgorin circle theorem
-		#Hard to scale well
+		# Bound on the maximum k-by-k-subset Frobenius norm.
+		# This is a bound on the 2-norm (operator norm), which is equal to the
+		# maximum eigenvalue for PSD matrices.
 		stillneed = K-numpositive
-		startingsums = sum(absSigma[:, ypositive],dims=2)
+		# Consider a sum of squared entries of the matrix.
+		startingsums = sum(absSigma[:, ypositive] .^ 2,dims=2)
 
+		# Sort absolute entries, ignoring fixed (positive or negative) entries
+		# (the fixed positive are taken care of in startingsums).
 		sortSigma = absSigma
 		sortSigma[:, ypositive .| ynegative] .= 0
 		sortSigma[ypositive .| ynegative, :] .= 0
-		sortSigma = -mapslices(sort, -sortSigma, dims=2)
-		eb1 = maximum(startingsums + sum(sortSigma[begin:end, 1:stillneed], dims=2))
+		# Sort rows in descending order from left to right.
+		sortSigma = -mapslices(sort, -(sortSigma .^ 2), dims=2)
+		# Take stillneed largest entries from the row along with startingsums
+		# (these entries must be included) and take sqrt (2-norm).
+		sortSigma = sqrt.(startingsums + sum(sortSigma[begin:end, 1:stillneed], dims=2))
+		# Now the Frobenius norm is bounded by taking K such row norms, and
+		# taking the 2-norm of those norms.
+		sortSigma = -mapslices(sort, -sortSigma, dims=1)
+		eb1 = norm(sortSigma[1:K])
 
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
