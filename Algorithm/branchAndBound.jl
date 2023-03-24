@@ -1,4 +1,4 @@
-using LinearAlgebra, Printf, Arpack
+using LinearAlgebra, Printf, Arpack, DataStructures
 function branchAndBound(prob, #problem object
 		K; # target sparsity
 		outputFlag = 3, # 1, 2, or 3 depending on level of detail sought in output
@@ -102,37 +102,48 @@ function branchAndBound(prob, #problem object
 		#Inspired by gershgorin circle theorem
 		#Hard to scale well
 		stillneed = K-numpositive
-		startingsums = sum(absSigma[:, ypositive],dims=2)
+		startingsums = sum(sqSigma[:, ypositive], dims=2)
 
-		eb1=0
-		cutoff = oldub*(1-1e-6)
+		eb1_squared = 0
+		eb1_struct = PriorityQueue{Float64, Float64}()
+		cutoff = (oldub*(1-1e-6))^2
 
+		current_row = 1
 		for i=1:length(y) # scanning over all columns
 			if y[i]==-1 || y[i]==1 # which columns to consider
 			    newsum = startingsums[i] # must include these rows
 			    added = 0
 			    if y[i]==-1 
 			    	# if we choose column i, we must choose row i
-			    	newsum = newsum + absSigma[i,i]
+			    	newsum = newsum + sqSigma[i,i]
 			    	added = 1
 			    end
 			    j=1
 			    while added < stillneed
 			        candidateIndex = permMat[i,j]
 			        if y[candidateIndex]==-1 && candidateIndex != i
-			            newsum = newsum + absSigma[i,candidateIndex]
+			            newsum = newsum + sqSigma[i,candidateIndex]
 			            added = added + 1
 			        end
 			        j=j+1
 			    end
-			    if newsum>eb1
-			        eb1=newsum
-			        if newsum>cutoff
-			    		break
-			    	end
+				if current_row<=K
+					enqueue!(eb1_struct, newsum, newsum)
+					eb1_squared += newsum
+			    elseif newsum>peek(eb1_struct).first
+			        eb1_squared += newsum - peek(eb1_struct).first
+					dequeue!(eb1_struct)
+					enqueue!(eb1_struct, newsum, newsum)
 			    end
+				if eb1_squared > cutoff
+					break
+				end
+
+				# We just processed a row, counting up until we reach k rows.
+				current_row += 1
 			end
 		end
+		eb1 = sqrt(eb1_squared)
 
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
@@ -241,13 +252,13 @@ function branchAndBound(prob, #problem object
 	start = time();
 
 	Sigma = prob.Sigma
-	absSigma = abs.(Sigma)
+	sqSigma = Sigma .^ 2
 	diagSigma = LinearAlgebra.diag(Sigma)
 	sortedOrder = sortperm(-diagSigma) #order from largest to smallest
 
-	permMat = round.(Int64,zeros(size(absSigma)))
+	permMat = round.(Int64,zeros(size(sqSigma)))
 	for i=1:size(permMat)[2]
-	    permMat[i,:]=sortperm(vec(absSigma[i,:]),rev=true)
+	    permMat[i,:]=sortperm(vec(sqSigma[i,:]),rev=true)
 	end
 
 	dimSelectLookup = Dict()
