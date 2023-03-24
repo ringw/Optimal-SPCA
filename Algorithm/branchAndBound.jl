@@ -105,11 +105,31 @@ function branchAndBound(prob, #problem object
 		stillneed = K-numpositive
 		startingsums = sum(absSigma[:, ypositive],dims=2)
 
-		sortSigma = absSigma
+		sortSigma = copy(absSigma)
+		# Zero out entries within every row being tested. These are either
+		# incorporated into startingsums, or removed entirely from the problem.
 		sortSigma[:, ypositive .| ynegative] .= 0
-		sortSigma[ypositive .| ynegative, :] .= 0
+		# For variables removed entirely from the problem, zero out row.
+		sortSigma[ynegative, :] .= 0
+
+		# Instead of zeroing out -1 (optional variable) rows, put the diagonal
+		# entry into startingsums. If we made a choice to take this row, then
+		# we are constrained to take the diagonal entry (symmetric matrix). This
+		# can shrink the problem if there is another variable, larger in its
+		# magnitude/variance, which we can avoid picking that off-diagonal.
+		diagentries = 1:(n+1):(n*n)
+		startingsums += Array{Float64}(.! ypositive) .* sortSigma[diagentries]
+		sortSigma[diagentries[.! ypositive]] .= 0
+
 		sortSigma = -mapslices(sort, -sortSigma, dims=2)
-		eb1 = maximum(startingsums + sum(sortSigma[begin:end, 1:stillneed], dims=2))
+		if sum(ypositive) > 0
+			eb1 = max(
+				maximum((startingsums + sum(sortSigma[begin:end, 1:(stillneed-1)], dims=2))[.! ypositive]),
+				maximum((startingsums + sum(sortSigma[begin:end, 1:stillneed], dims=2))[ypositive]),
+			)
+		else
+			eb1 = maximum(startingsums + sum(sortSigma[begin:end, 1:(stillneed-1)], dims=2))
+		end
 
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
