@@ -148,7 +148,55 @@ $$B =
 \right)
 $$
 
-We can expand out the result $B^2+C^2$, and create a formula which upper-bounds $(\sigma_1(MD))^2$ using Gershgorin. We would need to maximize (e.g. linear relaxation in $D$, and nonlinear objective function), or further simplify (e.g. substantial simplifications and an upper bound which is linear in the entries in $D$), this expression.
+Notably, $\sigma_1((I-uu^T) MD) \le ||C||_F$ is a useful inequality, preserved from the square root expression above.
+
+$$
+C^T C
+=
+\left(
+    \begin{matrix}
+        \sigma_1^2 (x^2 + x(1-x)) & \sigma_1\sigma_2 \sqrt{x(1-x)}
+        \\
+        \sigma_1\sigma_2 (x+1-x) \sqrt{x(1-x)} & \sigma_2^2 ((1-x)^2 + x(1-x))
+    \end{matrix}
+\right)
+$$
+where $x = \sin^2 \theta$.
+
+Simplify:
+$$
+C^T C
+=
+\left(
+    \begin{matrix}
+        \sigma_1^2 x & \sigma_1\sigma_2 \sqrt{x(1-x)}
+        \\
+        \sigma_1\sigma_2 \sqrt{x(1-x)} & -\sigma_2^2 x
+    \end{matrix}
+\right)
+$$
+
+Apply Gershgorin circle theorem to $B^2 + C^T C$. The bound on the spectral radius can be implemented as a conic program, where $\sigma_1,\sigma_2$ are our analytic upper bounds on the problem by other methods.
+
+% We have a useful bound:
+
+% $$
+% ||E||
+% \le
+% ||C^T C||_F^2
+% =
+% \sqrt{(\sigma_1^4 + \sigma_2^4) x^2 + 2\sigma_1^2\sigma_2^2 x(1-x)}
+% $$
+
+% Then:
+
+% $$
+% ||\Sigma||
+% \le
+% \sqrt{((\sigma_1^2 + ||A||)^2 + \sigma_2^4) x^2 + 2\sigma_1^2\sigma_2^2 x(1-x)}
+% $$
+
+% We think that there are variables such that $x$ is large (generally following an increasing trend as $||E||$ increases), but will probably not be optimal for the Sparse PCA problem following our assumptions. Therefore, factor out $\sqrt{x}$ from the expression, which will be our 
 
 \begin{thebibliography}{9}
     \bibitem{berk2019certifiably} Berk, Lauren, \& Dimitris Bertsimas. "Certifiably optimal sparse principal component analysis." Mathematical Programming Computation 11.3 (2019): 381-420.
