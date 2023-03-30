@@ -74,16 +74,35 @@ function branchAndBound(prob, #problem object
 	function return_bounds(y, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
-			return [val val]
+			return val, val, Nothing
 		elseif sum(abs.(y)) == K
 			val, ~ = bbMyeigmax(abs.(y), 0)
-			return [val val]
+			return val, val, Nothing
 		else
+			ypositive = y.==1
+			if sum(ypositive) >= 2
+				u = svd(A[:, ypositive]).U[:, 1]
+			else
+				u = original_u
+			end
 			eb = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
-			lower_val = YuanSubset(y)[1]
-			return [lower_val true_upper]
+			lower_val, ~, lower_contribution = project_data(y, u)
+			return lower_val, true_upper, copy(y)
 		end
+	end
+
+	function project_data(y, u)
+		startingsum = norm(u' * A[:, y .== 1])^2
+		numpositive = sum(y .== 1)
+		stillneed = K - numpositive
+		rank_one_trace = (u' * A[:, y .== -1])[1, :].^2
+		trace_inds = sortperm(rank_one_trace, rev=true)
+		best_y = zeros(size(y))
+		best_y[y .== 1] .= 1
+		best_y[findall(y .== -1)[trace_inds[1:stillneed]]] .= 1
+		bestObj, beta = YuanSubset(best_y)
+		return bestObj, beta, rank_one_trace
 	end
 
 	# Computes two upper bounds for the problem at node y
@@ -268,8 +287,6 @@ function branchAndBound(prob, #problem object
 		~, warmStart = subset(prob, K, timeLimit = max(20,timeCap/100))
 	end
 
-
-
 	#initializing variables
 	nodes = zeros(n, UOE)
 	nodes[:,1] = round.(Integer,-1*ones(n,1))
@@ -302,6 +319,8 @@ function branchAndBound(prob, #problem object
 	explored = 0
 	lower_revised = 0
 	best_node = (warmStart.!=0)*1
+
+	original_u = svd(A[:, BitArray(best_node)]).U[:, 1]
 
 	#Initializes output
 	println(" Nodes,   Left,  Objective,  Incumbent,       Gap(%),   Runtime(s)")
@@ -375,16 +394,16 @@ function branchAndBound(prob, #problem object
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub = return_bounds(newNodes[:,i], oldub)
+			lb, ub, update_node = return_bounds(newNodes[:,i], oldub)
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
-					best_node = copy(newNodes[:,i])
+					best_node = update_node
 					lower_revised = 1
 				end
 				if .!(isTerminal(newNodes[:,i]))
 					num_nodes = num_nodes + 1
-					nodes[:,num_nodes] = copy(newNodes[:,i])
+					nodes[:,num_nodes] = update_node
 					upper_bounds[num_nodes] = ub
 				end
 			end
