@@ -80,15 +80,28 @@ function branchAndBound(prob, #problem object
 			return val, val, abs.(y), Nothing
 		else
 			ypositive = y.==1
-			if sum(ypositive) >= 2
+			sumpositive = sum(ypositive)
+			stillneed = K - sumpositive
+			if sumpositive >= 2
 				u = svd(A[:, ypositive]).U[:, 1]
 			else
 				u = original_u
 			end
-			eb = eigen_bound(y, oldub)
-			true_upper, ~ = bbMyeigmax(y, eb)
 			lower_val, lower_greedy, lower_contribution = project_data(y, u)
-			return lower_val, true_upper, lower_greedy, copy(y)
+			upper_contribution = projection_davis_kahan(y, lower_val, lower_contribution)
+
+			upper_adjusted = copy(y)
+			lower_contribution_floor = sort(lower_contribution .* (y.==-1), rev=true)[stillneed]
+			upper_adjusted[(upper_adjusted .== -1) .& (upper_contribution .< lower_contribution_floor)] .= 0
+			oldub = min(
+				oldub,
+				sum(upper_contribution[ypositive])
+					+ sum(sort(upper_contribution .* (y.==-1), rev=true)[1:stillneed])
+			)
+
+			eb = eigen_bound(y, oldub)
+			true_upper, ~ = bbMyeigmax(upper_adjusted, eb)
+			return lower_val, true_upper, lower_greedy, upper_adjusted
 		end
 	end
 
@@ -101,7 +114,25 @@ function branchAndBound(prob, #problem object
 		best_y = zeros(size(y))
 		best_y[y .== 1] .= 1
 		best_y[findall(y .== -1)[trace_inds[1:stillneed]]] .= 1
-		return startingsum + sum(rank_one_trace[trace_inds[1:stillneed]]), best_y, rank_one_trace
+		return startingsum + sum(rank_one_trace[trace_inds[1:stillneed]]), best_y, (u' * A)[1, :].^2
+	end
+
+	function projection_davis_kahan(y, lower_val, lower_contribution)
+		ypositive = (y.==1)
+		numpositive = sum(ypositive)
+		stillneed = K-numpositive
+
+		startingsums = sum(diagSigma[ypositive])
+
+		indicesLeft = sortedOrder[y.==-1]
+		lambda_1 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
+		lambda_2 = lambda_1 - lower_val
+
+		residual_contribution = 1. .- lower_contribution
+		davis_kahan = (
+			lower_contribution
+			.+ (1. / lambda_1 + lambda_2 / (lower_val - lambda_2)^2) * residual_contribution
+		)
 	end
 
 	# Computes two upper bounds for the problem at node y
