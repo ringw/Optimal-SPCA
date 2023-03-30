@@ -74,10 +74,10 @@ function branchAndBound(prob, #problem object
 	function return_bounds(y, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
-			return val, val, Nothing
+			return val, val, max.(y,0), Nothing
 		elseif sum(abs.(y)) == K
 			val, ~ = bbMyeigmax(abs.(y), 0)
-			return val, val, Nothing
+			return val, val, abs.(y), Nothing
 		else
 			ypositive = y.==1
 			if sum(ypositive) >= 2
@@ -87,8 +87,8 @@ function branchAndBound(prob, #problem object
 			end
 			eb = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
-			lower_val, ~, lower_contribution = project_data(y, u)
-			return lower_val, true_upper, copy(y)
+			lower_val, lower_greedy, lower_contribution = project_data(y, u)
+			return lower_val, true_upper, lower_greedy, copy(y)
 		end
 	end
 
@@ -101,8 +101,7 @@ function branchAndBound(prob, #problem object
 		best_y = zeros(size(y))
 		best_y[y .== 1] .= 1
 		best_y[findall(y .== -1)[trace_inds[1:stillneed]]] .= 1
-		bestObj, beta = YuanSubset(best_y)
-		return bestObj, beta, rank_one_trace
+		return startingsum + sum(rank_one_trace[trace_inds[1:stillneed]]), best_y, rank_one_trace
 	end
 
 	# Computes two upper bounds for the problem at node y
@@ -202,19 +201,6 @@ function branchAndBound(prob, #problem object
 			dim = intersect(firsteigOrder, negindices)[1]
 		end
 		return dim
-	end
-
-	# Applies the Yuan and Zhang first order heuristic for localSearchSteps steps
-	# In order to generate a lower bound for the problem at y
-	function YuanSubset(y)
-		beta = Hk(startingEig, K, y)
-
-			for i = 1:localSearchSteps
-				beta = Hk(sparseTimes(Sigma,beta), K, y)
-			end
-			bestObj = (transpose(beta)*sparseTimes(Sigma,beta))[1]
-
-		return bestObj, beta
 	end
 
 	# Selects which node to branch on
@@ -394,11 +380,11 @@ function branchAndBound(prob, #problem object
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub, update_node = return_bounds(newNodes[:,i], oldub)
+			lb, ub, greedy_node, update_node = return_bounds(newNodes[:,i], oldub)
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
-					best_node = update_node
+					best_node = greedy_node
 					lower_revised = 1
 				end
 				if .!(isTerminal(newNodes[:,i]))
@@ -438,10 +424,8 @@ function branchAndBound(prob, #problem object
 		timeOut = true
 	end
 
-	# saves final solutions
-	y = (YuanSubset(best_node)[2].!=0)*1
-
-	yKeep = .!(y.==0)
+	# best_node is final result.
+	yKeep = .!(best_node.==0)
 	Q = copy(Sigma[yKeep,yKeep])
 	lambdas=Float64[]
 	betas=Float64[]
@@ -453,7 +437,7 @@ function branchAndBound(prob, #problem object
 	end
 	eig_soln = betas[:,1]
 	obj = lambdas[1]
-	xVal = zeros(length(y))
+	xVal = zeros(length(best_node))
 	xVal[yKeep] = eig_soln
 
 	final_gap = max(0,(upper-lower)/(1e-10+upper)*100)
