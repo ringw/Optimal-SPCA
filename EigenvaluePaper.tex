@@ -76,6 +76,12 @@ Our lower bound on the Hermitian eigenproblem $M^T M$ follows from the factor $M
 
 After greedily selecting $k$ variables in the subspace, then we can take those $k$ rows and columns in the original Hermitian eigenproblem. This gives us a concrete solution $D_k$ and a new lower bound on the objective value (not the rank-one problem, but a new $k$-by-$k$ Hermitian eigenproblem): $(\sigma_1^\ell(MD_k))^2$.
 
+\section{Upper bound on Sparse PCA from $||\Sigma||_F^2$}
+
+This bound comes from the Hermitian eigenproblem. For each row of $\Sigma$ element-wise squared, put the entries into a linear program objective where our vector $d \in \mathbb{R}^n, 0\le d_i \le 1, ||d||_1 = k$. If we introduce linear cuts (produced in a loop by proceeding to the next section), then we can tighten the objective value. Otherwise, this is solved greedily. Berk et. al pre-sorted the rows of $\Sigma$, improving big-O performance.
+
+Next, select $k$ partial row sums from the vector of row sums, again with the possibility of introducing linear cuts. We upper-bounded $||D^T \Sigma D||_F^2$. This objective value, after square root, has more sensitivity/fewer tied objective values in the tree, and is tighter, compared to the absolute value row sums $\infty$-norm (Berk et. al, Gershgorin circle theorem). This approach (when linear programming is avoided) has the same asymptotic runtime as Berk et. al's Gershgorin routine.
+
 \section{Upper bound on Sparse PCA from $D_i$}
 
 Upper bound will require a detailed analysis of the perturbation from our rank-one projection to the full-rank matrix $\Sigma$.
@@ -97,13 +103,7 @@ $$
 ||D^T \Sigma D||_2 \le ||A||_2 + ||E||_2
 $$
 
-Set $\cos\theta = \left< v_1, u \right>$, where we expect an eigenspace with multiplicity 1: $(D^T \Sigma D) v_1 = (\sigma_1(MD))^2 v_1$. Apply Davis-Kahan to the dominant eigenvector $v_1$ of $D^T \Sigma D$, and to the range of $D^TM uu^T MD$:
-
-$$
-|\sin\theta| \le \frac{||D^T \Sigma D - D^T M u u^T M D||_F}{||D^T \Sigma D||_2} = \frac{||E||_F}{(\sigma_1(MD))^2}
-$$
-
-Analyze $||D^TM v||_2^2$ for some vector $v$. After change-of-basis onto the left singular vectors of $MD$, the first component of the vector that we will analyze is equal to $\left< v, u \right>$. The squared norm of the matrix-vector multiplication squares this entry and multiplies by $\sigma_1^2$, squares a next entry and multiplies by $\sigma_2^2$, and so on until $\sigma_k^2$. We can compute various norms of $D^TM$ using the diagonal matrix of the singular values (from SVD). However, when we apply a projection $D^TM(I-uu^T)$, then the singular values can change dramatically, by mapping orthogonal left singular vectors of $MD$ to vectors which are no longer orthogonal.
+Returning to the singular value problem, analyze $||D^TM v||_2^2$ for some vector $v$. After change-of-basis onto the left singular vectors of $MD$, the first component of the vector that we will analyze is equal to $\left< v, u \right>$. The squared norm of the matrix-vector multiplication squares this entry and multiplies by $\sigma_1^2$, squares a next entry and multiplies by $\sigma_2^2$, and so on until $\sigma_k^2$. We can compute various norms of $D^TM$ using the diagonal matrix of the singular values (from SVD). However, when we apply a projection $D^TM(I-uu^T)$, then the singular values can change dramatically, by mapping orthogonal left singular vectors of $MD$ to vectors which are no longer orthogonal.
 
 After SVD, as multiplication on the left of $MD$ is analyzed using a diagonal matrix after SVD, then multiplication on the left of $(I-uu^T)MD$ will be bounded using a single-column (or single-row) matrix. Construct a vector in $\mathbb{R}^2$:
 
