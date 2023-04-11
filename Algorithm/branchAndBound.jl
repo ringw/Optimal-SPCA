@@ -98,6 +98,42 @@ function branchAndBound(prob, #problem object
 		numpositive = sum(ypositive)
 		stillneed = K-numpositive
 
+		if numpositive >= 2
+			u, s, ~ = svd(A[:, ypositive])
+			u_1 = u[:, 1]
+			greedy_loc = sortperm((A' * u_1)[:, 1].^2 .* (y.==-1), rev=true)[1:stillneed]
+			z_1 = norm(A[:, greedy_loc]' * u_1, 1)
+			# z_2 = sqrt(norm(A[:, greedy_loc])^2 - z_1^2)
+			z_2 = norm(
+				mapslices(
+					(v) -> sqrt(norm(v)^2 - (v' * u_1)[1,1]^2),
+					A[:, greedy_loc],
+					dims=1),
+				1)
+			b = s[1]^2 + s[2]^2 + z_1^2 + z_2^2
+			eb_golub = (
+				b + sqrt(b^2 - 4*(s[1]^2*s[2]^2 + s[1]^2*z_2^2 + s[2]^2*z_1^2))
+			)/2.
+
+			eigs_golub = [s[1]; s[2]] .^ 2
+			for location in greedy_loc
+				z_1 = abs(A[:, location] ⋅ u_1)
+				z_2 = sqrt(norm(A[:, location])^2 - z_1^2)
+				b = sum(eigs_golub) + z_1^2 + z_2^2
+				eigs_golub = (
+					b .+ [1.; -1.] .* sqrt(
+						b^2
+						- 4 * (eigs_golub[1] * eigs_golub[2]
+							+ eigs_golub[1] * z_2^2
+							+ eigs_golub[2] * z_1^2)
+					)
+				) ./ 2.
+			end
+			eb_golub = eigs_golub[1]
+		else
+			eb_golub = oldub
+		end
+
 		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
 		#Inspired by gershgorin circle theorem
 		#Hard to scale well
@@ -139,7 +175,7 @@ function branchAndBound(prob, #problem object
 		indicesLeft = sortedOrder[y.==-1]
 		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
 
-		return min(eb1,eb2)
+		return min(eb_golub,eb1,eb2)
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
@@ -376,6 +412,7 @@ function branchAndBound(prob, #problem object
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
 			lb, ub = return_bounds(newNodes[:,i], oldub)
+			@assert (ub - lb) / lb > -0.0001 "ub $ub lb $lb gap $((ub - lb) / lb)"
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
