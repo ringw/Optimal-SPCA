@@ -82,7 +82,84 @@ This bound comes from the Hermitian eigenproblem. For each row of $\Sigma$ eleme
 
 Next, select $k$ partial row sums from the vector of row sums, again with the possibility of introducing linear cuts. We upper-bounded $||D^T \Sigma D||_F^2$. This objective value, after square root, has more sensitivity/fewer tied objective values in the tree, and is tighter, compared to the absolute value row sums $\infty$-norm (Berk et. al, Gershgorin circle theorem). This approach (when linear programming is avoided) has the same asymptotic runtime as Berk et. al's Gershgorin routine.
 
-\section{Upper bound on Sparse PCA from $D_i$}
+\section{Upper bound on Sparse PCA from $D_i$ (Golub)}
+
+Try completing the data matrix $MD$ by adding $k-i$ columns to $D_i$ (appending $k-i$ columns to an SVD problem). Multiply $MD$ on the left by an orthonormal matrix (from Gram-Schmidt), where the first $i$ rows are the left singular vectors of $MD_i$: $u_1,...,u_i$. When we add a column to $MD_i$, we know that the first entry in the column after multiplication is $\left< u_1, M_i \right>$. The $\ell_2$ norm of the added column is already known, and the perturbation to the first singular vector is maximized if the remaining mass in the column is placed in the second component, where $u_2$ has the second-largest singular value.
+
+In terms of the Hermitian eigenproblem, we are proposing adding to the leading 2x2 top-left block of the matrix $U^T D_i^T M^2 D_i U$.
+
+The update is maximized when the columns added in the perturbation are identical to one another, so apply the rank-one update for one such column $M_j$:
+
+$$
+|| U^T D_i^T M^2 D_i U + U^T M_j M_j^T U ||
+\le || U^T D_i^T M^2 D_i U + vv^T ||
+$$$$
+v = \left[\begin{matrix}
+    \left< u_1, M_j \right>
+    \\
+    \sqrt{
+        ||M_j||^2
+        - \left< u_1, M_j \right>
+        ^2
+    }
+    \\ 0
+    \\ \dots
+    \\ 0
+\end{matrix}\right]
+$$
+
+Apply Golub:
+
+\begin{equation*}
+    \begin{aligned}
+        w(\lambda)
+        &=
+        1 + \frac{v_1^2}{\left(\sigma_1(MD_i)\right)^2 - \lambda}
+        + \frac{v_2^2}{\left(\sigma_2(MD_i)\right)^2 - \lambda}
+        \\
+        &= 0
+        \\
+        0 &=
+        \left(\left(\sigma_1(MD_i)\right)^2 - \lambda\right)
+        \left(\left(\sigma_2(MD_i)\right)^2 - \lambda\right)
+        + v_1^2
+        \left(\left(\sigma_2(MD_i)\right)^2 - \lambda\right)
+        + v_2^2
+        \left(\left(\sigma_1(MD_i)\right)^2 - \lambda\right)
+        \\
+        0 &=
+        \left(\sigma_1(MD_i)\right)^2
+        \left(\sigma_2(MD_i)\right)^2
+        - \left(\left(\sigma_1(MD_i)\right)^2
+        + \left(\sigma_2(MD_i)\right)^2\right)
+        \lambda
+        + \lambda^2
+        \\
+        &+ v_1^2\left(\sigma_2(MD_i)\right)
+        + v_2^2\left(\sigma_1(MD_i)\right)
+        - \left(v_1^2 + v_2^2\right) \lambda
+        \\
+        \lambda &=
+        \frac{1}{2}
+        \left(
+            b \pm
+            \sqrt{b^2 - 4
+                \left(\sigma_1(MD_i)\right)^2
+                \left(\sigma_2(MD_i)\right)^2
+                - v_1^2\left(\sigma_2(MD_i)\right)^2
+                - v_2^2\left(\sigma_1(MD_i)\right)^2
+            }
+        \right)
+        \\
+        b &= 
+            \left(\sigma_1(MD_i)\right)^2
+        + \left(\sigma_2(MD_i)\right)^2
+    \end{aligned}
+\end{equation*}
+
+Columns in $D$ will be selected greedily based on $\left<u_1, M_j\right>$, as this basis vector contributes more to the eigenvalue perturbation than the other eigenvectors do. The $k-i$ columns of $M$ should iteratively update the first and second eigenvalues of the system, applied in any order.
+
+\section{Upper bound on Sparse PCA from $D_i$ (Davis-Kahan)}
 
 Upper bound will require a detailed analysis of the perturbation from our rank-one projection to the full-rank matrix $\Sigma$.
 
