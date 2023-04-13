@@ -74,15 +74,15 @@ function branchAndBound(prob, #problem object
 	function return_bounds(y, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
-			return [val val]
+			return val, val, Nothing
 		elseif sum(abs.(y)) == K
 			val, ~ = bbMyeigmax(abs.(y), 0)
-			return [val val]
+			return val, val, Nothing
 		else
-			eb = eigen_bound(y, oldub)
+			eb, y = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
 			lower_val = YuanSubset(y)[1]
-			return [lower_val true_upper]
+			return lower_val, true_upper, y
 		end
 	end
 
@@ -98,10 +98,42 @@ function branchAndBound(prob, #problem object
 		numpositive = sum(ypositive)
 		stillneed = K-numpositive
 
+		# Efficient lower bound from projection onto a subspace of rank 1.
+		if numpositive >= 2
+			u = svd(A[:, ypositive]).U[:, 1]
+			rank_one_term = (A' * u)[:, 1] .^ 2
+		else
+			# We can choose any unit-norm vector of length n to try to hit the
+			# first singular value of A. The first singular vector of A will
+			# definitely do this, although it is not a sparse solution to the
+			# problem, so the energy might be spread more uniformly across the
+			# variables compared to the "u" above.
+			rank_one_term = (A' * ev1)[:, 1] .^ 2
+		end
+
 		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
 		#Inspired by gershgorin circle theorem
 		#Hard to scale well
 		stillneed = K-numpositive
+
+		# We have a system where we can add free variables, one at a time,
+		# from numpositive to K. When we add each variable, because it is a
+		# rank-one system, the increment to ||D' Sigma D|| is precisely the
+		# trace of the rank-one Hermitian matrix for this variable. Later,
+		# we will upper-bound a variable's contribution to ||D' Sigma D||^2.
+		# If that does not exceed this lower bound, then we must reject the
+		# variable to avoid a contradiction.
+		contribution_lb = minimum(selectsorted(rank_one_term[y .== -1], stillneed))
+		# Lower bound on the rank-one system. This needs to be the same system
+		# (projection) being analyzed in contribution_lb, not the lower bound
+		# which is calculated outside of this function. This lower bound could
+		# be perfectly good, but we have not wired it into the main loop yet.
+		obj_lb = (
+			sum(rank_one_term[y .== 1])
+			+ sum(selectsorted(rank_one_term[y .== -1], stillneed))
+		)
+		contribution_lb_2 = obj_lb^2 - (obj_lb-contribution_lb)^2
+
 		startingsums = sum(sqSigma[:, ypositive], dims=2)
 
 		eb1_squared = 0
@@ -127,6 +159,18 @@ function branchAndBound(prob, #problem object
 			        end
 			        j=j+1
 			    end
+
+				# Try rejecting variable i.
+				# Going from K-1 to K variables, we consider the new row and
+				# column of the Hermitian matrix, where the entries are squared
+				# and summed up (Frobenius), but subtract one squared
+				# on-diagonal value (inclusion-exclusion principle).
+				contribution_ub_2 = 2*newsum - diagSigma[i]^2
+				if contribution_ub_2 < contribution_lb_2
+					# Only update variables with a value of -1.
+					y[i] = max(y[i], 0)
+				end
+
 				if current_row<=K
 					enqueue!(eb1_struct, newsum, newsum)
 					eb1_squared += newsum
@@ -150,7 +194,7 @@ function branchAndBound(prob, #problem object
 		indicesLeft = sortedOrder[y.==-1]
 		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
 
-		return min(eb1,eb2)
+		return min(eb1,eb2), y
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
@@ -262,6 +306,12 @@ function branchAndBound(prob, #problem object
 	end
 
 	dimSelectLookup = Dict()
+
+	# If the node does not provide variable(s) with a value of 1 (variable is
+	# forced on), then instead of some singular vector v on a small SVD
+	# (variables forced on so far), we will project the data onto the dominant
+	# eigenvector of Sigma.
+	ev1 = eigen(Hermitian(Sigma)).vectors[:, end]
 
 	A = prob.data
 	m, n = size(A)
@@ -386,17 +436,18 @@ function branchAndBound(prob, #problem object
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub = return_bounds(newNodes[:,i], oldub)
+			lb, ub, new_node = return_bounds(newNodes[:,i], oldub)
 			@assert (ub - lb) / ub >= -0.001 "Expect $ub > $lb (gap $((ub - lb) / ub))"
+
 			if ub*(1-gap) > lower
 				if lb > lower
 					lower = lb
-					best_node = copy(newNodes[:,i])
+					best_node = new_node
 					lower_revised = 1
 				end
-				if .!(isTerminal(newNodes[:,i]))
+				if .!(isTerminal(new_node))
 					num_nodes = num_nodes + 1
-					nodes[:,num_nodes] = copy(newNodes[:,i])
+					nodes[:,num_nodes] = new_node
 					upper_bounds[num_nodes] = ub
 				end
 			end
