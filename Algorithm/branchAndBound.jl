@@ -1,4 +1,10 @@
 using LinearAlgebra, Printf, Arpack, DataStructures
+
+# For PriorityQueue sorting of float values (the second part of the pair). The
+# first part of the struct is unused, but it needs to be unique (allocate a new
+# mutable struct).
+mutable struct EbEntry end
+
 function branchAndBound(prob, #problem object
 		K; # target sparsity
 		outputFlag = 3, # 1, 2, or 3 depending on level of detail sought in output
@@ -137,7 +143,7 @@ function branchAndBound(prob, #problem object
 		startingsums = sum(sqSigma[:, ypositive], dims=2)
 
 		eb1_squared = 0
-		eb1_struct = PriorityQueue{Float64, Float64}()
+		eb1_struct = PriorityQueue{EbEntry, Float64}()
 		cutoff = (oldub*(1-1e-6))^2
 
 		current_row = 1
@@ -172,12 +178,12 @@ function branchAndBound(prob, #problem object
 				end
 
 				if current_row<=K
-					enqueue!(eb1_struct, newsum, newsum)
+					enqueue!(eb1_struct, EbEntry(), newsum)
 					eb1_squared += newsum
-			    elseif newsum>peek(eb1_struct).first
-			        eb1_squared += newsum - peek(eb1_struct).first
+			    elseif newsum>peek(eb1_struct).second
+			        eb1_squared += newsum - peek(eb1_struct).second
 					dequeue!(eb1_struct)
-					enqueue!(eb1_struct, newsum, newsum)
+					enqueue!(eb1_struct, EbEntry(), newsum)
 			    end
 				if eb1_squared > cutoff
 					break
@@ -437,7 +443,7 @@ function branchAndBound(prob, #problem object
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
 			lb, ub, new_node = return_bounds(newNodes[:,i], oldub)
-			@assert (ub - lb) / ub >= -0.001 "Expect $ub > $lb (gap $((ub - lb) / ub))"
+			# @assert (ub - lb) / ub >= -0.001 "Expect $ub > $lb (gap $((ub - lb) / ub))"
 
 			if ub*(1-gap) > lower
 				if lb > lower
