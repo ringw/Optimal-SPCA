@@ -107,8 +107,11 @@ function branchAndBound(prob, #problem object
 
 		# Efficient lower bound from projection onto a subspace of rank 1.
 		if numpositive >= 2
-			u = svd(A[:, ypositive]).U[:, 1]
-			rank_one_term = (A' * u)[:, 1] .^ 2
+			node_eigen = eigen(Hermitian(Sigma[ypositive, ypositive]))
+			# u == A * v / sqrt(lam1)
+			# A' * u == Sigma D v / sqrt(lam1)
+			# Then, apply elementwise square.
+			rank_one_term = (Sigma[:, ypositive] * node_eigen.vectors[:, end])[:, 1] .^ 2 / node_eigen.values[end]
 		else
 			# We can choose any unit-norm vector of length n to try to hit the
 			# first singular value of A. The first singular vector of A will
@@ -355,7 +358,9 @@ function branchAndBound(prob, #problem object
 	# forced on), then instead of some singular vector v on a small SVD
 	# (variables forced on so far), we will project the data onto the dominant
 	# eigenvector of Sigma.
-	ev1 = eigen(Hermitian(Sigma)).vectors[:, end]
+	eig_Sigma = eigen(Hermitian(Sigma))
+	ev1 = eig_Sigma.vectors[:, end]
+	eval1 = eig_Sigma.values[end]
 
 	A = prob.data
 	m, n = size(A)
