@@ -195,12 +195,48 @@ function branchAndBound(prob, #problem object
 		end
 		eb1 = sqrt(eb1_squared)
 
+		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
+		#Inspired by gershgorin circle theorem
+		#Hard to scale well
+		stillneed = K-numpositive
+		startingsums = sum(absSigma[:, ypositive],dims=2)
+
+		eb1x=0
+		cutoff = oldub*(1-1e-6)
+
+		for i=1:length(y) # scanning over all columns
+			if y[i]==-1 || y[i]==1 # which columns to consider
+			    newsum = startingsums[i] # must include these rows
+			    added = 0
+			    if y[i]==-1 
+			    	# if we choose column i, we must choose row i
+			    	newsum = newsum + absSigma[i,i]
+			    	added = 1
+			    end
+			    j=1
+			    while added < stillneed
+			        candidateIndex = permMat[i,j]
+			        if y[candidateIndex]==-1 && candidateIndex != i
+			            newsum = newsum + absSigma[i,candidateIndex]
+			            added = added + 1
+			        end
+			        j=j+1
+			    end
+			    if newsum>eb1x
+			        eb1x=newsum
+			        if newsum>cutoff
+			    		break
+			    	end
+			    end
+			end
+		end
+
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
 		indicesLeft = sortedOrder[y.==-1]
 		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
 
-		return min(eb1,eb2), y
+		return min(eb1,eb1x,eb2), y
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
@@ -303,6 +339,7 @@ function branchAndBound(prob, #problem object
 
 	Sigma = prob.Sigma
 	sqSigma = Sigma .^ 2
+	absSigma = abs.(Sigma)
 	diagSigma = LinearAlgebra.diag(Sigma)
 	sortedOrder = sortperm(-diagSigma) #order from largest to smallest
 
