@@ -80,10 +80,11 @@ function branchAndBound(prob, #problem object
 	function return_bounds(y, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
-			return val, val, Nothing
+			# y is terminal so no need to make a copy.
+			return val, val, y
 		elseif sum(abs.(y)) == K
 			val, ~ = bbMyeigmax(abs.(y), 0)
-			return val, val, Nothing
+			return val, val, y
 		else
 			eb, y = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
