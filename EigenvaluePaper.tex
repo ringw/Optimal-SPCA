@@ -1,6 +1,9 @@
 \documentclass{article}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{stackengine}
+\usepackage{scalerel}
+\def\tang{\ThisStyle{\abovebaseline[0pt]{\scalebox{-1}{$\SavedStyle\perp$}}}}
 
 \title{Perturbation bound on Sparse PCA}
 
@@ -73,7 +76,90 @@ Our lower bound on the Hermitian eigenproblem $M^T M$ follows from the factor $M
 
 After greedily selecting $k$ variables in the subspace, then we can take those $k$ rows and columns in the original Hermitian eigenproblem. This gives us a concrete solution $D_k$ and a new lower bound on the objective value (not the rank-one problem, but a new $k$-by-$k$ Hermitian eigenproblem): $(\sigma_1^\ell(MD_k))^2$.
 
-\section{Upper bound on Sparse PCA from $D_i$}
+\section{Upper bound on Sparse PCA from $||\Sigma||_F^2$}
+
+This bound comes from the Hermitian eigenproblem. For each row of $\Sigma$ element-wise squared, put the entries into a linear program objective where our vector $d \in \mathbb{R}^n, 0\le d_i \le 1, ||d||_1 = k$. If we introduce linear cuts (produced in a loop by proceeding to the next section), then we can tighten the objective value. Otherwise, this is solved greedily. Berk et. al pre-sorted the rows of $\Sigma$, improving big-O performance.
+
+Next, select $k$ partial row sums from the vector of row sums, again with the possibility of introducing linear cuts. We upper-bounded $||D^T \Sigma D||_F^2$. This objective value, after square root, has more sensitivity/fewer tied objective values in the tree, and is tighter, compared to the absolute value row sums $\infty$-norm (Berk et. al, Gershgorin circle theorem). This approach (when linear programming is avoided) has the same asymptotic runtime as Berk et. al's Gershgorin routine.
+
+\section{Upper bound on Sparse PCA from $D_i$ (Golub)}
+
+Try completing the data matrix $MD$ by adding $k-i$ columns to $D_i$ (appending $k-i$ columns to an SVD problem). Multiply $MD$ on the left by an orthonormal matrix (from Gram-Schmidt), where the first $i$ rows are the left singular vectors of $MD_i$: $u_1,...,u_i$. When we add a column to $MD_i$, we know that the first entry in the column after multiplication is $\left< u_1, M_i \right>$. The $\ell_2$ norm of the added column is already known, and the perturbation to the first singular vector is maximized if the remaining mass in the column is placed in the second component, where $u_2$ has the second-largest singular value.
+
+In terms of the Hermitian eigenproblem, we are proposing adding to the leading 2x2 top-left block of the matrix $U^T D_i^T M^2 D_i U$.
+
+The update is maximized when the columns added in the perturbation are identical to one another, so apply the rank-one update for one such column $M_j$:
+
+$$
+|| U^T D_i^T M^2 D_i U + U^T M_j M_j^T U ||
+\le || U^T D_i^T M^2 D_i U + vv^T ||
+$$$$
+v = \left[\begin{matrix}
+    \left< u_1, M_j \right>
+    \\
+    \sqrt{
+        ||M_j||^2
+        - \left< u_1, M_j \right>
+        ^2
+    }
+    \\ 0
+    \\ \dots
+    \\ 0
+\end{matrix}\right]
+$$
+
+Apply Golub:
+
+\begin{equation*}
+    \begin{aligned}
+        w(\lambda)
+        &=
+        1 + \frac{v_1^2}{\left(\sigma_1(MD_i)\right)^2 - \lambda}
+        + \frac{v_2^2}{\left(\sigma_2(MD_i)\right)^2 - \lambda}
+        \\
+        &= 0
+        \\
+        0 &=
+        \left(\left(\sigma_1(MD_i)\right)^2 - \lambda\right)
+        \left(\left(\sigma_2(MD_i)\right)^2 - \lambda\right)
+        + v_1^2
+        \left(\left(\sigma_2(MD_i)\right)^2 - \lambda\right)
+        + v_2^2
+        \left(\left(\sigma_1(MD_i)\right)^2 - \lambda\right)
+        \\
+        0 &=
+        \left(\sigma_1(MD_i)\right)^2
+        \left(\sigma_2(MD_i)\right)^2
+        - \left(\left(\sigma_1(MD_i)\right)^2
+        + \left(\sigma_2(MD_i)\right)^2\right)
+        \lambda
+        + \lambda^2
+        \\
+        &+ v_1^2\left(\sigma_2(MD_i)\right)
+        + v_2^2\left(\sigma_1(MD_i)\right)
+        - \left(v_1^2 + v_2^2\right) \lambda
+        \\
+        \lambda &=
+        \frac{1}{2}
+        \left(
+            b \pm
+            \sqrt{b^2 - 4
+                \left(\sigma_1(MD_i)\right)^2
+                \left(\sigma_2(MD_i)\right)^2
+                - v_1^2\left(\sigma_2(MD_i)\right)^2
+                - v_2^2\left(\sigma_1(MD_i)\right)^2
+            }
+        \right)
+        \\
+        b &= 
+            \left(\sigma_1(MD_i)\right)^2
+        + \left(\sigma_2(MD_i)\right)^2
+    \end{aligned}
+\end{equation*}
+
+Columns in $D$ will be selected greedily based on $\left<u_1, M_j\right>$, as this basis vector contributes more to the eigenvalue perturbation than the other eigenvectors do. The $k-i$ columns of $M$ should iteratively update the first and second eigenvalues of the system, applied in any order.
+
+\section{Upper bound on Sparse PCA from $D_i$ (Davis-Kahan)}
 
 Upper bound will require a detailed analysis of the perturbation from our rank-one projection to the full-rank matrix $\Sigma$.
 
@@ -94,113 +180,96 @@ $$
 ||D^T \Sigma D||_2 \le ||A||_2 + ||E||_2
 $$
 
-Set $\cos\theta = \left< v_1, u \right>$, where we expect an eigenspace with multiplicity 1: $(D^T \Sigma D) v_1 = (\sigma_1(MD))^2 v_1$. Apply Davis-Kahan to the dominant eigenvector $v_1$ of $D^T \Sigma D$, and to the range of $D^TM uu^T MD$:
+Returning to the singular value problem, analyze $||D^TM v||_2^2$ for some vector $v$. After change-of-basis onto the left singular vectors of $MD$, the first component of the vector that we will analyze is equal to $\left< v, u \right>$. The squared norm of the matrix-vector multiplication squares this entry and multiplies by $\sigma_1^2$, squares a next entry and multiplies by $\sigma_2^2$, and so on until $\sigma_k^2$. We can compute various norms of $D^TM$ using the diagonal matrix of the singular values (from SVD). However, when we apply a projection $D^TM(I-uu^T)$, then the singular values can change dramatically, by mapping orthogonal left singular vectors of $MD$ to vectors which are no longer orthogonal.
+
+After SVD, as multiplication on the left of $MD$ is analyzed using a diagonal matrix after SVD, then multiplication on the left of $(I-uu^T)MD$ will be bounded using a single-column (or single-row) matrix. Construct a vector in $\mathbb{R}^2$:
+
+$$\mathbf{v} \to \left[
+    \begin{matrix}
+        v_{\tang} \\ v_\perp
+    \end{matrix}
+\right]
+=\left[
+    \begin{matrix}
+        \left<\mathbf{u},\mathbf{v}\right>
+        \\
+        \sqrt{||\mathbf{v}||_2^2 -
+        \left<\mathbf{u},\mathbf{v}\right>^2}
+    \end{matrix}
+\right]
+$$
 
 $$
-|\sin\theta| \le \frac{||D^T \Sigma D - D^T M u u^T M D||_F}{||D^T \Sigma D||_2} = \frac{||E||_F}{(\sigma_1(MD))^2}
+||D^TMv||_2 \le
+\left|\left| B \left[
+    \begin{matrix}
+        v_{\tang} \\ v_\perp
+    \end{matrix}
+\right] \right|\right|_2
+=
+\left|\left| \left(
+    \begin{matrix}
+        \sigma_1 & 0 \\ 0 & \sigma_2
+    \end{matrix}
+\right) \left[
+    \begin{matrix}
+        v_{\tang} \\ v_\perp
+    \end{matrix}
+\right] \right|\right|_2 $$$$
+||(I-uu^T)D^TMv||_2 \le
+\left| C \left[
+    \begin{matrix}
+        |v_{\tang}| \\ |v_\perp|
+    \end{matrix}
+\right] \right|
+\le
+\left| \left(
+    \begin{matrix}
+        \sigma_1 & \sigma_2
+    \end{matrix}
+\right) \left[
+    \begin{matrix}
+        |v_{\tang}| \\ |v_\perp|
+    \end{matrix}
+\right] \right|
 $$
 
-% We will need an upper bound on $\cos\theta$ as well, because we hope that $E$'s range will have a high angular distance with the original dominant eigenvector:
+However, the entries of $C$ will actually be smaller than the singular values which we started with, because $I-uu^T$ is a projection matrix with a null space spanned by $u$. We find the first entry of $C$ by multiplying by $||(I-uu^T)v_1||$ (right singular vector of $MD$), and we find the second entry of $C$ by multiplying by an upper-bound on $||(I-uu^T)v_i||, 1<i\le k$ (subspace complementary to the first singular vector). The bounds on these subspace relations are found using the Davis-Kahan $\sin\theta$ theorem \cite{davis1970rotation}:
 
-% $$
-% |\cos\theta|
-% \le
-%\frac{||D^T \Sigma D - E||_F}{||D^T \Sigma D||_2 - (\sigma_2((I-uu^T)MD))^2} =
-% \frac{||A||_F}{(\sigma_1(MD))^2 - (\sigma_2((I-uu^T)MD))^2}
-% $$
+$$
+C =
+\left(
+    \begin{matrix}
+        \sigma_1 \frac{||E||}{||\Sigma||}
+        &
+        \sigma_2 \frac{||E||}{||A|| - \sigma_2^2}
+    \end{matrix}
+\right)
+$$
 
-% For a vector $v$, there is a function $f(v)$ contracting the vector to a new vector of equal $\ell_2$ norm, where the first entry is $\left<v, u\right>$ and the second entry makes $||v||_2$ whole. Apply a change of basis to $A$ and $E$ to produce similar matrices, such that the first basis vector is along the original direction of $u$. Then, upper-bound and absolute value the $\ell_2$ norm of the 1 x 1, $n-1$ x 1, 1 x $n-1$, and $n-1$ x $n-1$ blocks. This contracted matrix has an $\ell_2$ norm which is the upper bound of the $\ell_2$ norm of the original matrix.
+Relating the singular value problem to the Hermitian eigenproblem, $\sigma_1^2 = ||\Sigma||$. We will try to make the denominator in the second entry a constant, by taking a lower-bound on $||A||$ from any particular $D^\prime$ matrix and $||MD^\prime u||_2^2$. NOTE: This may not actually be a lower bound, since a better $||\Sigma||$ could still exist with a smaller component along our choice of $u$...
 
-% For $A$, we have a simple contraction, which we call $B$: $$B = \left(\begin{matrix}||D^T Mu||_2 & 0 \\ 0 & 0 \end{matrix}\right)$$
+$$
+C =
+\left(
+    \begin{matrix}
+        \frac{1}{\sigma_1}
+        &
+        \frac{\sigma_2}{||MD^\prime u||^2 - \sigma_2^2}
+    \end{matrix}
+\right)
+||E||
+$$
 
-% The contracted $A$ is diagonalized because it is rank-one, and it was projected onto the space spanned by $u$, which is a basis vector.
-
-We are testing an angular distance between principal eigenvectors. A sine of zero has the consequence that $u$ is the principal eigenvector of $D^T \Sigma D$, aligning with $||E||_F$ minimized. Then we would have $||E||_2 = (\sigma_2(MD))^2$ (the first singular value was eliminated without otherwise affecting the SVD). There is action on the first singular value of $(I-uu^T)MD$ given by $\sin\theta$, and action on the remaining singular values (upper-bounded by $\sigma_2(MD)$) given by $\cos\theta$. These projections of $(I-uu^T)MD$ onto further smaller subspaces have orthogonal ranges, so we have: $$\sigma_1((I-uu^T)MD) \le \sqrt{(\sigma_1(MD))^2 \sin^2\theta + (\sigma_2(MD))^2 \cos^2\theta}$$
-
-Now, our bound on $||E||_2$ depends on $||E||_F^2$.
+Now, our bound on $||E||_2$ comes from $||C||^2$, which depends on $||E||^2$ (to be implemented by bounding $||E||_F^2$). To linearize the problem, the $1$-by-$2$ matrix must be held constant and its singular value upper-bounded.
 If $||E||^2$ can be derived (or bounded) as a linear function in the indicator variables for the entries of $D$, then we will produce a new linear program to maximize $(\sigma_1(MD))^2 \le ||A|| + ||E||$. The coefficients should produce a tighter bound than the linear program which optimizes Sparse PCA using the trace of the submatrix. As part of linearizing the problem, $\sigma_2(MD)$ will be upper-bounded using an upper bound on the trace and the lower bound on $\sigma_1(MD)$: $(\sigma_2(MD))^2 \le \text{Tr } D^T\Sigma D - (\sigma_1(MD))^2$.
 
-\subsection{Nonlinear optimization from matrix contraction}
-
-We can treat these entries as a 2-by-1 matrix, a contraction of $(I-uu^T)MD$ which upper-bounds its action (the operator norm). Without affecting the operator norm, we can accept inputs which are in the same two-dimensional contracted space as the output which we create. Call the contracted matrix $C$.
-
-$$C =
-\left(
-    \begin{matrix}
-        \sigma_1(MD) \sin^2\theta
-        &
-        \sigma_1(MD) \sin\theta\cos\theta
-        \\
-        \sigma_2(MD) \sin\theta\cos\theta
-        &
-        \sigma_2(MD) \cos^2\theta
-    \end{matrix}
-\right)
-$$
-
-In this vector space, our rank-one matrix $uu^TMD$ is modeled as:
-
-$$B =
-\left(
-    \begin{matrix}
-        ||D^TMu||_2 & 0 \\ 0 & 0
-    \end{matrix}
-\right)
-$$
-
-Notably, $\sigma_1((I-uu^T) MD) \le ||C||_F$ is a useful inequality, preserved from the square root expression above.
-
-$$
-C^T C
-=
-\left(
-    \begin{matrix}
-        \sigma_1^2 (x^2 + x(1-x)) & \sigma_1\sigma_2 \sqrt{x(1-x)}
-        \\
-        \sigma_1\sigma_2 (x+1-x) \sqrt{x(1-x)} & \sigma_2^2 ((1-x)^2 + x(1-x))
-    \end{matrix}
-\right)
-$$
-where $x = \sin^2 \theta$.
-
-Simplify:
-$$
-C^T C
-=
-\left(
-    \begin{matrix}
-        \sigma_1^2 x & \sigma_1\sigma_2 \sqrt{x(1-x)}
-        \\
-        \sigma_1\sigma_2 \sqrt{x(1-x)} & -\sigma_2^2 x
-    \end{matrix}
-\right)
-$$
-
-Apply Gershgorin circle theorem to $B^2 + C^T C$. The bound on the spectral radius can be implemented as a conic program, where $\sigma_1,\sigma_2$ are our analytic upper bounds on the problem by other methods.
-
-% We have a useful bound:
-
-% $$
-% ||E||
-% \le
-% ||C^T C||_F^2
-% =
-% \sqrt{(\sigma_1^4 + \sigma_2^4) x^2 + 2\sigma_1^2\sigma_2^2 x(1-x)}
-% $$
-
-% Then:
-
-% $$
-% ||\Sigma||
-% \le
-% \sqrt{((\sigma_1^2 + ||A||)^2 + \sigma_2^4) x^2 + 2\sigma_1^2\sigma_2^2 x(1-x)}
-% $$
-
-% We think that there are variables such that $x$ is large (generally following an increasing trend as $||E||$ increases), but will probably not be optimal for the Sparse PCA problem following our assumptions. Therefore, factor out $\sqrt{x}$ from the expression, which will be our 
+Analyze $||MDu||_2^2 + ||C^T C||_2 \ge ||\Sigma||$ (Weyl's inequalities). For both expressions, we produced an upper bound which is linear in the entries of $D$ (indicator variables).
 
 \begin{thebibliography}{9}
     \bibitem{berk2019certifiably} Berk, Lauren, \& Dimitris Bertsimas. "Certifiably optimal sparse principal component analysis." Mathematical Programming Computation 11.3 (2019): 381-420.
     \bibitem{bunch1978updating} Bunch, James R., \& Christopher P. Nielsen. "Updating the singular value decomposition." Numerische Mathematik 31.2 (1978): 111-129.
+    \bibitem{davis1970rotation} Davis, C., \& Kahan, W. M. (1970). The rotation of eigenvectors by a perturbation. III. SIAM Journal on Numerical Analysis, 7(1), 1-46.
     % \bibitem{zhu2019rank} Zhu, L., Peng, X. \& Liu, H. Rank-one perturbation bounds for singular values of arbitrary matrices. J Inequal Appl 2019, 138 (2019).
 \end{thebibliography}
 
