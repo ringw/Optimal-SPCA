@@ -80,10 +80,11 @@ function branchAndBound(prob, #problem object
 	function return_bounds(y, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
-			return val, val, Nothing
+			# y is terminal so no need to make a copy.
+			return val, val, y
 		elseif sum(abs.(y)) == K
 			val, ~ = bbMyeigmax(abs.(y), 0)
-			return val, val, Nothing
+			return val, val, y
 		else
 			eb, y = eigen_bound(y, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
@@ -106,8 +107,11 @@ function branchAndBound(prob, #problem object
 
 		# Efficient lower bound from projection onto a subspace of rank 1.
 		if numpositive >= 2
-			u = svd(A[:, ypositive]).U[:, 1]
-			rank_one_term = (A' * u)[:, 1] .^ 2
+			node_eigen = eigen(Hermitian(Sigma[ypositive, ypositive]))
+			# u == A * v / sqrt(lam1)
+			# A' * u == Sigma D v / sqrt(lam1)
+			# Then, apply elementwise square.
+			rank_one_term = (Sigma[:, ypositive] * node_eigen.vectors[:, end])[:, 1] .^ 2 / node_eigen.values[end]
 		else
 			# We can choose any unit-norm vector of length n to try to hit the
 			# first singular value of A. The first singular vector of A will
@@ -202,12 +206,48 @@ function branchAndBound(prob, #problem object
 			end
 		end
 
+		#Uses maximum absolute column sums to provide an upper bound on eigenvalues
+		#Inspired by gershgorin circle theorem
+		#Hard to scale well
+		stillneed = K-numpositive
+		startingsums = sum(absSigma[:, ypositive],dims=2)
+
+		eb1x=0
+		cutoff = oldub*(1-1e-6)
+
+		for i=1:length(y) # scanning over all columns
+			if y[i]==-1 || y[i]==1 # which columns to consider
+			    newsum = startingsums[i] # must include these rows
+			    added = 0
+			    if y[i]==-1 
+			    	# if we choose column i, we must choose row i
+			    	newsum = newsum + absSigma[i,i]
+			    	added = 1
+			    end
+			    j=1
+			    while added < stillneed
+			        candidateIndex = permMat[i,j]
+			        if y[candidateIndex]==-1 && candidateIndex != i
+			            newsum = newsum + absSigma[i,candidateIndex]
+			            added = added + 1
+			        end
+			        j=j+1
+			    end
+			    if newsum>eb1x
+			        eb1x=newsum
+			        if newsum>cutoff
+			    		break
+			    	end
+			    end
+			end
+		end
+
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
 		indicesLeft = sortedOrder[y.==-1]
 		eb2 = startingsums+sum(selectsorted(diagSigma[indicesLeft],stillneed))
 
-		return min(eb1,eb2), y
+		return min(eb1,eb1x,eb2), y
 	end
 
 	# Returns true if y represents a terminal node (only one k-sparse support is feasible)
@@ -310,6 +350,7 @@ function branchAndBound(prob, #problem object
 
 	Sigma = prob.Sigma
 	sqSigma = Sigma .^ 2
+	absSigma = abs.(Sigma)
 	diagSigma = LinearAlgebra.diag(Sigma)
 	sortedOrder = sortperm(-diagSigma) #order from largest to smallest
 
@@ -324,7 +365,9 @@ function branchAndBound(prob, #problem object
 	# forced on), then instead of some singular vector v on a small SVD
 	# (variables forced on so far), we will project the data onto the dominant
 	# eigenvector of Sigma.
-	ev1 = eigen(Hermitian(Sigma)).vectors[:, end]
+	eig_Sigma = eigen(Hermitian(Sigma))
+	ev1 = eig_Sigma.vectors[:, end]
+	eval1 = eig_Sigma.values[end]
 
 	A = prob.data
 	m, n = size(A)
@@ -378,7 +421,9 @@ function branchAndBound(prob, #problem object
 	best_node = (warmStart.!=0)*1
 
 	#Initializes output
-	println(" Nodes,   Left,  Objective,  Incumbent,       Gap(%),   Runtime(s)")
+	if outputFlag > 0
+		println(" Nodes,   Left,  Objective,  Incumbent,       Gap(%),   Runtime(s)")
+	end
 	toPrint=[Printf.@sprintf("%6d, %6d, %10f, %10f, %10.3f %%, %10.3f s \n", num_nodes, explored, upper, lower, (upper-lower)/(1e-10+upper)*100, time()-start)]
 	printtime = time()
 
