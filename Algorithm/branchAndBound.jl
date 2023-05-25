@@ -138,11 +138,13 @@ function branchAndBound(prob, #problem object
 			sum(rank_one_term[y .== 1])
 			+ sum(selectsorted(rank_one_term[y .== -1], stillneed))
 		)
-		contribution_lb_2 = obj_lb^2 - (obj_lb-contribution_lb)^2
 
 		startingsums = sum(sqSigma[:, ypositive], dims=2)
 
 		eb1_squared = 0
+		# Track the upper bounds on contributions of each variable to the squared
+		# Sparse PCA objective.
+		eb1_squared_values = fill(NaN, n)
 		eb1_struct = PriorityQueue{EbEntry, Float64}()
 		cutoff = (oldub*(1-1e-6))^2
 
@@ -165,17 +167,8 @@ function branchAndBound(prob, #problem object
 			        end
 			        j=j+1
 			    end
+				eb1_squared_values[i] = newsum
 
-				# Try rejecting variable i.
-				# Going from K-1 to K variables, we consider the new row and
-				# column of the Hermitian matrix, where the entries are squared
-				# and summed up (Frobenius), but subtract one squared
-				# on-diagonal value (inclusion-exclusion principle).
-				contribution_ub_2 = 2*newsum - diagSigma[i]^2
-				if contribution_ub_2 < contribution_lb_2
-					# Only update variables with a value of -1.
-					y[i] = max(y[i], 0)
-				end
 
 				if current_row<=K
 					enqueue!(eb1_struct, EbEntry(), newsum)
@@ -194,6 +187,20 @@ function branchAndBound(prob, #problem object
 			end
 		end
 		eb1 = sqrt(eb1_squared)
+
+		contribution_lb_2 = obj_lb^2 - (eb1-contribution_lb)^2
+		for i=1:length(y) # scanning over all columns
+			# Try rejecting variable i.
+			# Going from K-1 to K variables, we consider the new row and
+			# column of the Hermitian matrix, where the entries are squared
+			# and summed up (Frobenius), but subtract one squared
+			# on-diagonal value (inclusion-exclusion principle).
+			contribution_ub_2 = 2*eb1_squared_values[i] - diagSigma[i]^2
+			if contribution_ub_2 < contribution_lb_2
+				# Only update variables with a value of -1.
+				y[i] = max(y[i], 0)
+			end
+		end
 
 		#based on how the trace is a bound on the eigenvalues since they're all positive
 		startingsums = sum(diagSigma[ypositive])
