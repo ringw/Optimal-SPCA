@@ -24,9 +24,15 @@ Hermitian{Float64}(H::HermitianUpdate) = Hermitian(H.H[:,H.indices][H.indices,:]
 
 function with_update(H::HermitianUpdate, index::Int)
     i = length(H.indices)
+    K = i+1
     # SVD of a 1 by 1 nonnegative matrix
-    if i == 0
+    if K == 1
         return HermitianUpdate(H.H, [index], ones(1,1), H.H[index:index, index])
+    elseif K <= 4
+        indices = [H.indices; index]
+        data = Hermitian(H.H[:, indices][indices, :])
+        eigs = eigen(data)
+        return HermitianUpdate(H.H, indices, eigs.vectors, eigs.values)
     end
 
     A = H.H[:,H.indices][H.indices,:]
