@@ -77,7 +77,7 @@ function branchAndBound(prob, #problem object
 	# oldub is the upper bound of the parent node, which provides a maximum value
 	# that the upper bound at y could have.  Feeding oldub into eigen_bound helps
 	# reduce time spent in that function
-	function return_bounds(y, oldub)
+	function return_bounds(y, diag::HermitianUpdate, oldub)
 		if sum(max.(y,0)) == K
 			val, ~ = bbMyeigmax(max.(y,0), 0)
 			# y is terminal so no need to make a copy.
@@ -86,7 +86,7 @@ function branchAndBound(prob, #problem object
 			val, ~ = bbMyeigmax(abs.(y), 0)
 			return val, val, y
 		else
-			eb, y = eigen_bound(y, oldub)
+			eb, y = eigen_bound(y, diag, oldub)
 			true_upper, ~ = bbMyeigmax(y, eb)
 			lower_val = YuanSubset(y)[1]
 			return lower_val, true_upper, y
@@ -100,18 +100,19 @@ function branchAndBound(prob, #problem object
 	# oldub (the upper bound from the parent node) provides a maximum value on
 	# the upper bound at y.  It is used here to terminate the gershgorin calculation early
 	# if the gershgorin bound is higher than oldub
-	function eigen_bound(y, oldub)
-		ypositive = (y.==1)
+	function eigen_bound(y, diag::HermitianUpdate, oldub)
+		ypositive = (y .== 1)
 		numpositive = sum(ypositive)
+		# @assert length(diag.indices) == numpositive
+		# @assert sort(unique(diag.indices)) == findall(y .== 1)
 		stillneed = K-numpositive
 
 		# Efficient lower bound from projection onto a subspace of rank 1.
 		if numpositive >= 2
-			node_eigen = eigen(Hermitian(Sigma[ypositive, ypositive]))
 			# u == A * v / sqrt(lam1)
 			# A' * u == Sigma D v / sqrt(lam1)
 			# Then, apply elementwise square.
-			rank_one_term = (Sigma[:, ypositive] * node_eigen.vectors[:, end])[:, 1] .^ 2 / node_eigen.values[end]
+			rank_one_term = (Sigma[:, ypositive] * diag.V[:, end])[:, 1] .^ 2 / diag.Lambda[end]
 		else
 			# We can choose any unit-norm vector of length n to try to hit the
 			# first singular value of A. The first singular vector of A will
@@ -390,6 +391,8 @@ function branchAndBound(prob, #problem object
 	#initializing variables
 	nodes = zeros(n, UOE)
 	nodes[:,1] = round.(Integer,-1*ones(n,1))
+	# State of the diagonalization at each node
+	diags = Vector{HermitianUpdate}(repeat([HermitianUpdate(Sigma)], UOE))
 	upper_bounds = zeros(UOE)
 
 	eigGapSave = eigGap
@@ -437,6 +440,7 @@ function branchAndBound(prob, #problem object
 			nodesToKeep = nodesToKeep[nodesToKeep.< num_nodes+1]
 			upper_bounds = [upper_bounds[nodesToKeep]; zeros(UOE)]
 			nodes = [nodes[:, nodesToKeep] zeros(n,UOE)]
+			diags = [diags[nodesToKeep]; repeat([HermitianUpdate(Sigma)], UOE)]
 			death = [death[nodesToKeep]; falses(UOE)]
 			num_nodes = length(nodesToKeep)
 		end
@@ -463,6 +467,7 @@ function branchAndBound(prob, #problem object
 			break;
 		end
 		old_y = nodes[:, selected_node]
+		old_diag = diags[selected_node]
 
 		# Determines whether to split in 2 on one dimension or use multiple segments
 		if (K-sum(max.(old_y,0)) < ksegmentsTrigger) & (randn()>1)
@@ -475,12 +480,17 @@ function branchAndBound(prob, #problem object
 				for i = 1:numBranches
 					newNodes[partition[i],i] = 0
 				end
+				newDiags = repeat([HermitianUpdate(Sigma)], length(numBranches))
 			else
 				numBranches = 2
 				newNodes = transpose(repeat(transpose(old_y), numBranches))
 				branch_dim = branchDimSelect(old_y)
 				newNodes[branch_dim ,1] = 1
 				newNodes[branch_dim ,2] = 0
+				newDiags = [
+					with_update(diag, branch_dim)
+					diag
+				]
 			end
 		else
 			numBranches = 2
@@ -488,13 +498,17 @@ function branchAndBound(prob, #problem object
 			branch_dim = branchDimSelect(old_y)
 			newNodes[branch_dim ,1] = 1
 			newNodes[branch_dim ,2] = 0
+			newDiags = [
+				with_update(old_diag, branch_dim)
+				old_diag
+			]
 		end
 
 		# Computes bounds at new nodes and saves them if not dominated or terminal
 		lower_revised = 0
 		oldub = upper_bounds[selected_node]
 		for i = 1:numBranches
-			lb, ub, new_node = return_bounds(newNodes[:,i], oldub)
+			lb, ub, new_node = return_bounds(newNodes[:,i], newDiags[i], oldub)
 			# @assert (ub - lb) / ub >= -0.001 "Expect $ub > $lb (gap $((ub - lb) / ub))"
 
 			if ub*(1-gap) > lower
@@ -507,6 +521,7 @@ function branchAndBound(prob, #problem object
 					num_nodes = num_nodes + 1
 					nodes[:,num_nodes] = new_node
 					upper_bounds[num_nodes] = ub
+					diags[num_nodes] = newDiags[i]
 				end
 			end
 		end

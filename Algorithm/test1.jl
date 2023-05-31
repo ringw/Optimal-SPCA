@@ -7,6 +7,7 @@ end
 ###############################################################################
 ### We have hard-coded the test data here, in order to avoid Julia dependency issues
 ###############################################################################
+include(normpath(joinpath(@__FILE__,"..",".."))*"Algorithm/hermitianUpdate.jl")
 include(normpath(joinpath(@__FILE__,"..",".."))*"Algorithm/branchAndBound.jl")
 include(normpath(joinpath(@__FILE__,"..",".."))*"Algorithm/utilities.jl")
 include(normpath(joinpath(@__FILE__,"..",".."))*"Algorithm/multiComponents.jl")
