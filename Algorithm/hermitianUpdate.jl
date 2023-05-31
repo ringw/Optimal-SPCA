@@ -12,13 +12,15 @@ using LinearAlgebra
 using SparseArrays
 
 struct HermitianUpdate
-    H::Matrix{Float32}
+    H::Matrix{Float64}
     indices::Vector{Int}
-    V::Matrix{Float32}
-    Lambda::Vector{Float32}
+    V::Matrix{Float64}
+    Lambda::Vector{Float64}
 
 end
 HermitianUpdate(H) = HermitianUpdate(H, [], zeros(0,0), [])
+
+Hermitian{Float64}(H::HermitianUpdate) = Hermitian(H.H[:,H.indices][H.indices,:])
 
 function with_update(H::HermitianUpdate, index::Int)
     i = length(H.indices)
@@ -62,13 +64,13 @@ function with_update(H::HermitianUpdate, index::Int)
     K = length(update)
 
     # Lambda before perturbation
-    D_old = Vector{Float32}([0; H.Lambda])
+    D_old = Vector{Float64}([0; H.Lambda])
     # Lambda after perturbation
-    D = Array{Float32}(undef, i+1)
+    D = Array{Float64}(undef, i+1)
     # Change-of-basis to be applied inside LAPACK. The identity.
-    Q = Matrix{Float32}(I, K, K)
+    Q = Matrix{Float64}(I, K, K)
     # Eigenvectors of L' L
-    S = Matrix{Float32}(undef, i+1, i+1)
+    S = Matrix{Float64}(undef, i+1, i+1)
 
     Kstart = 1
     Kstop = K
@@ -77,19 +79,19 @@ function with_update(H::HermitianUpdate, index::Int)
     ldq = K
     lds = K
     # Parameterize update into zeta (unit-normed) and rho (magnitude)
-    rho = Float32(norm(chol_first_row))
-    zeta = Array{Float32}(chol_first_row) / rho
+    rho = Float64(norm(chol_first_row))
+    zeta = Array{Float64}(chol_first_row) / rho
     # Go from the norm of the vector to the norm of the rank-one matrix.
     rho = rho ^ 2
     # Status bits
     info = Vector{Int32}([-1000])
     status = ccall(
-        (:slaed9_, "liblapack"),
+        (:dlaed9_, "liblapack"),
         Int64,
         (Ref{Int32}, Ref{Int32}, Ref{Int32}, Ref{Int32},
-            Ptr{Float32}, Ptr{Float32},
-            Ref{Int32}, Ref{Float32},
-            Ptr{Float32}, Ptr{Float32}, Ptr{Float32},
+            Ptr{Float64}, Ptr{Float64},
+            Ref{Int32}, Ref{Float64},
+            Ptr{Float64}, Ptr{Float64}, Ptr{Float64},
             Ref{Int32}, Ptr{Int32}),
         K, Kstart, Kstop, N, D, Q, ldq, rho, D_old, zeta, S, lds, info)
     if 0 != info[1]
@@ -109,12 +111,12 @@ function with_update(H::HermitianUpdate, index::Int)
     U = chol_f * S * Diagonal(1 ./ sqrt.(D))
     # @assert U * U' ≈ I "Unitary matrix $U"
 
-    # We have L' L = S D S' (then, V_augmented is applied on the outside). We
-    # want to map L on the right so that its right singular vectors are mapped
-    # to its left singular vectors. Cancel out the right singular vectors:
-    # L = U D S', by right-multiplication by S. Then, apply the left singular
-    # vectors on the right-hand side (U'). Transpose this unitary matrix because
-    # L is transposed.
-    V_augmented = V_augmented * (U' * S)'
+    # L = chol_f = U sqrt.(D) S'
+    # A_augmented = L L'
+    #             = (U S') L' L (U S')'
+    #             = (U S') S D S' (U S')'
+    #             = U D U'
+    V_augmented = V_augmented * U
+
     HermitianUpdate(H.H, [H.indices; index], V_augmented, D)
 end
